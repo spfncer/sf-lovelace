@@ -15,30 +15,28 @@ entities are auto-discovered through the device registry (manual overrides in co
 | Modes as icon-only buttons | Heat / Cool / Dry / **Off** — matching the physical remote |
 | Biorhythm programs in a `<select>` | Program select under the sliders — also carries **Turbo** and **Extended Heat**, mirroring HA's native preset menu |
 | Time remaining present + controllable | stepper (±15 min) + quick-set chips, paired with run-end-time readout |
+| Blend into the HA UI | every control is an HA-native component (see §3a) — no bespoke styling |
 
 ## 2. Wireframe
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Master BedJet                               │  header: device name + status line
-│ ● Heating · ends 6:30 AM                    │  ● = mode-colored status dot
+│ Master BedJet                               │  header: device name only
 ├─────────────────────────────────────────────┤
-│                  35°                        │  big setpoint readout (mirrors slider)
-│       room 22.4° · air 28.1° · fan 75%      │  secondary readouts
+│        35°         │         28°           │  two-number readout
+│       Setting      │        Actual         │  (target | current temperature)
 │                                             │
-│      🔥       ❄       💧       ⏻          │  mode buttons — icon only, active highlighted
-│                                             │
+│   [ 🔥 ][ ❄ ][ 💧 ][ ⏻ ]                  │  mode buttons — ha-control-button-group,
+│                                             │  icon-only, active segment highlighted
 │ Target temp   35°C                          │
-│ 19° ────────────●──────────────────── 43°   │  target temp slider (device min/max)
-│                                             │
+│  ────────●────────────────────────         │  ha-slider (device min/max)
 │ Fan          75%                            │
-│  5% ──────────────●───────────────── 100%   │  fan slider (5% steps)
-│                                             │
-│ Program   [ None                      ▾ ] ⏹ │  preset select + stop (while a program runs):
+│  ─────●──────────────────────────           │  ha-slider (5% steps)
+│ Program    [ None                     ▾ ] ⏹ │  ha-select + stop (while a program runs):
 │                                             │  None · Turbo · Extended Heat · programs
 │ Time remaining          ⏱ ends 6:30 AM     │
-│    [−]   1h 30m   [+]                       │  runtime stepper (±15 min)
-│     30m    1h    2h    4h    10h            │  quick-set chips
+│   ( − )   1h 30m   ( + )                    │  ha-icon-button stepper (±15 min)
+│   [30m] [1h] [2h] [4h] [10h]               │  ha-chip quick-set
 └─────────────────────────────────────────────┘
 ```
 
@@ -46,13 +44,28 @@ entities are auto-discovered through the device registry (manual overrides in co
 
 | Element | Reads | Writes |
 |---|---|---|
-| Setpoint + temp slider | `climate.*`: `target_temperature`, `min_temp`, `max_temp` | `climate.set_temperature` |
+| Setting \| Actual readout | `climate.*`: `target_temperature`, `current_temperature` | — |
+| Temp slider | `climate.*`: `target_temperature`, `min_temp`, `max_temp` | `climate.set_temperature` |
 | Fan slider | `climate.*`: `fan_mode` (`"75%"`) | `climate.set_fan_mode` ⚠ **not** `fan.set_percentage` — the fan entity implicitly turns the device on in **Cool** when it is off |
 | Mode buttons | `hvac_mode`; `hvac_modes` (Dry only present on V3) | `climate.set_hvac_mode` |
 | Program select | `preset_mode`, `preset_modes` | `climate.set_preset_mode`; stop (programs) → `set_hvac_mode off` |
 | Runtime row | `number.*_runtime_remaining` (+ `max`), `sensor.*_run_end_time` | `number.set_value` (minutes) |
-| Readouts | `sensor.*_ambient_temperature` (room), `climate.current_temperature` (air) | — |
 | Program running | `sensor.*_bio_sequence_step > 0` (fallback: fan on + hvac off) | — |
+
+### 3a. Native components
+
+| UI element | HA component | Notes |
+|---|---|---|
+| Mode buttons | `ha-control-button-group` + `ha-control-button` | the same segmented control HA's climate more-info uses; active segment filled with `--primary-color` |
+| Temp / fan sliders | `ha-slider` | Material slider — primary fill, no bespoke tracks or scale labels |
+| Program select | `ha-select` | HA's standard dropdown incl. native popup on mobile |
+| Quick-set chips | `ha-chip` | selected chip = primary fill |
+| Stepper −/+ | `ha-icon-button` with MDI `minus`/`plus` | round icon buttons |
+| Icons | `ha-icon` | MDI: `fire`, `snowflake`, `water`, `power`, `stop`, `clock-outline` |
+| Card shell | `ha-card` + HA CSS variables | colors/sizing inherit from the active theme |
+
+> The mockup approximates these with plain HTML/CSS (it can't load HA's components);
+> the real card uses the components directly, so it blends with any theme by construction.
 
 **Program select contents** = `preset_modes` minus memory presets:
 
@@ -78,14 +91,17 @@ entities are auto-discovered through the device registry (manual overrides in co
 
 ## 4. States & control availability
 
-| Device state | Status line | Mode buttons | Temp/Fan sliders | Select | Runtime row |
-|---|---|---|---|---|---|
-| Off | `Off` | none active | disabled | shows None (starts program) | dimmed |
-| Heat / Cool / Dry | `Heating/Cooling/Drying · ends X` | active | enabled | shows None | enabled |
-| Turbo | `Turbo boost · ends X` | Heat lit | pinned & disabled | shows Turbo | countdown (fixed 10 min) |
-| Extended Heat | `Extended heat · ends X` | Heat lit | enabled | shows Extended Heat | enabled (max 10 h) |
-| Program | `Name · step N · ends X` | none active | disabled (device-driven) | program + ⏹ stop | countdown only |
-| Unavailable | `unavailable` | — | all disabled | — | — |
+There is no dedicated status line — state is visible through the controls themselves
+(active mode button, select value, `running · step N` chip, `ends X` in the runtime row).
+
+| Device state | Mode buttons | Temp/Fan sliders | Select | Runtime row |
+|---|---|---|---|---|
+| Off | none active | disabled | shows None (starts program) | dimmed |
+| Heat / Cool / Dry | active | enabled | shows None | enabled |
+| Turbo | Heat lit | pinned & disabled | shows Turbo | countdown (fixed 10 min) |
+| Extended Heat | Heat lit | enabled | shows Extended Heat | enabled (max 10 h) |
+| Program | none active | disabled (device-driven) | program + ⏹ stop + `running · step N` | countdown only |
+| Unavailable | — | all disabled | — | — |
 
 - Turbo / Extended Heat exit: press any mode button, or pick `None` (or another preset).
 - During biorhythm Wait steps the climate entity reports `off` while the fan runs — the
@@ -119,7 +135,7 @@ The integration is **°C-only**; the card displays °C (device °F display is no
 type: custom:sf-bedjet-card
 entity: climate.master_bedjet   # everything else auto-discovered via device registry
 # optional overrides:
-# name, ambient_entity, runtime_entity, end_time_entity, step_entity
+# name, runtime_entity, end_time_entity, step_entity
 ```
 
 ## 8. Locked decisions (2026-10-10)
@@ -134,6 +150,14 @@ entity: climate.master_bedjet   # everything else auto-discovered via device reg
 5. **Tech stack** — [custom-cards boilerplate](https://github.com/custom-cards/boilerplate-card)
    (Lit 3 + TypeScript 5 + Rollup 4, Yarn 4 via Corepack). Repo bootstrapped as
    `sf-bedjet-card`; TODOs from the template are still in place pending implementation.
+6. **Native controls** — every control uses HA's own components (`ha-control-button-group`,
+   `ha-slider`, `ha-select`, `ha-chip`, `ha-icon-button`, `ha-icon`/MDI) and HA theme
+   variables; nothing bespoke.
+7. **No status line** — header shows the device name only; state is visible through the
+   controls (active mode button, select value, runtime row).
+8. **Readout** — two numbers side by side: **Setting** (target) | **Actual** (current
+   temperature), separated by a divider; large numbers, small muted labels. The ambient
+   temperature sensor is no longer displayed on the card.
 
 ## 9. Implementation outline
 
