@@ -1,6 +1,6 @@
 # Home Assistant Custom Card - Dev Container Setup
 
-This directory contains the development container configuration for building and testing the sf-bedjet-card custom card for Home Assistant.
+This directory contains the development container configuration for building and testing the sf-lovelace custom card collection for Home Assistant.
 
 ## Setup Instructions
 

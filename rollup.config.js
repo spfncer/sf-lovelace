@@ -36,9 +36,9 @@ const onwarn = (warning, warn) => {
 
 export default [
   {
-    input: 'src/sf-bedjet-card.ts',
+    input: 'src/index.ts',
     output: {
-      file: 'dist/sf-bedjet-card.js',
+      file: 'dist/sf-lovelace.js',
       format: 'es',
       inlineDynamicImports: true,
     },

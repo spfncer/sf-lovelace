@@ -3592,9 +3592,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sf-bedjet-card@workspace:.":
+"sf-lovelace@workspace:.":
   version: 0.0.0-use.local
-  resolution: "sf-bedjet-card@workspace:."
+  resolution: "sf-lovelace@workspace:."
   dependencies:
     "@lit-labs/context": "npm:0.4.1"
     "@lit-labs/motion": "npm:1.0.7"

@@ -38,7 +38,7 @@ jobs:
 
           node -e "const fs=require('fs');const version=process.env.VERSION;const pkgPath='package.json';const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));pkg.version=version;fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');"
 
-          sed -i "s/^export const CARD_VERSION = '.*';$/export const CARD_VERSION = '$VERSION';/" src/const.ts
+          sed -i "s/^export const CARD_VERSION = '.*';$/export const CARD_VERSION = '$VERSION';/" src/shared/const.ts
         env:
           VERSION: ${{ github.ref_name }}
 
@@ -47,7 +47,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
 
           PKG_VERSION=$(node -p "require('./package.json').version")
-          CONST_VERSION=$(sed -n "s/^export const CARD_VERSION = '\(.*\)';$/\1/p" src/const.ts)
+          CONST_VERSION=$(sed -n "s/^export const CARD_VERSION = '\(.*\)';$/\1/p" src/shared/const.ts)
 
           [ "$PKG_VERSION" = "$VERSION" ] || {
             echo "package.json version mismatch: expected '$VERSION', got '$PKG_VERSION'"
@@ -55,7 +55,7 @@ jobs:
           }
 
           [ "$CONST_VERSION" = "$VERSION" ] || {
-            echo "src/const.ts CARD_VERSION mismatch: expected '$VERSION', got '$CONST_VERSION'"
+            echo "src/shared/const.ts CARD_VERSION mismatch: expected '$VERSION', got '$CONST_VERSION'"
             exit 1
           }
 
@@ -76,7 +76,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/sf-bedjet-card.js
-          asset_name: sf-bedjet-card.js
+          file: dist/sf-lovelace.js
+          asset_name: sf-lovelace.js
           tag: ${{ github.ref }}
           overwrite: true

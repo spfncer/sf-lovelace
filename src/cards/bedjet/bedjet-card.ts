@@ -3,14 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HassEntity } from 'home-assistant-js-websocket';
 import { HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
 
-import type { BedjetRegistryEntry, SfBedjetCardConfig } from './types';
-import { localize } from './localize/localize';
-
-console.info(
-  `%c  SF-BEDJET-CARD \n%c  ${localize('common.version')} 0.1.0    `,
-  'color: orange; font-weight: bold; background: black',
-  'color: white; font-weight: bold; background: dimgray',
-);
+import type { BedjetRegistryEntry, SfBedjetCardConfig } from './bedjet-card-types';
+import { localize } from '../../shared/localize/localize';
 
 // Registering with window.customCards makes the card appear in the Lovelace
 // "Add Card" picker. The array is shared by every custom card on the page.
@@ -53,7 +47,7 @@ interface SliderElement extends HTMLElement {
 @customElement('sf-bedjet-card')
 export class SfBedjetCard extends LitElement {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    await import('./editor');
+    await import('./bedjet-card-editor');
     return document.createElement('sf-bedjet-card-editor');
   }
 

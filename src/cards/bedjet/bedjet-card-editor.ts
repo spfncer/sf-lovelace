@@ -2,8 +2,8 @@ import { LitElement, html, TemplateResult, css } from 'lit';
 import { HomeAssistant, fireEvent, LovelaceCardEditor } from 'custom-card-helpers';
 import { customElement, property, state } from 'lit/decorators.js';
 
-import type { SfBedjetCardConfig } from './types';
-import { localize } from './localize/localize';
+import type { SfBedjetCardConfig } from './bedjet-card-types';
+import { localize } from '../../shared/localize/localize';
 
 @customElement('sf-bedjet-card-editor')
 export class SfBedjetCardEditor extends LitElement implements LovelaceCardEditor {

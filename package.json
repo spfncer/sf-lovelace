@@ -1,9 +1,9 @@
 {
-  "name": "sf-bedjet-card",
+  "name": "sf-lovelace",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "packageManager": "yarn@4.12.0",
-  "description": "Lovelace card for BedJet V2/3 climate devices via the ha-bedjet integration",
+  "description": "A collection of personal Lovelace cards for Home Assistant",
   "keywords": [
     "home-assistant",
     "homeassistant",
@@ -12,7 +12,7 @@
     "custom-cards",
     "bedjet"
   ],
-  "module": "sf-bedjet-card.js",
+  "module": "sf-lovelace.js",
   "author": "sfasulo",
   "license": "MIT",
   "dependencies": {

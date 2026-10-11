@@ -1,24 +1,31 @@
-# SF BedJet Card
+# SF Lovelace Cards
 
-A custom [Lovelace](https://www.home-assistant.io/dashboards/) card for controlling
-[BedJet V2 / BedJet 3](https://bedjet.com) devices through the
-[ha-bedjet](https://github.com/natekspencer/ha-bedjet) integration.
+A collection of personal [Lovelace](https://www.home-assistant.io/dashboards/) custom
+cards for Home Assistant. Everything ships as a **single bundle** (`sf-lovelace.js`):
+add one resource and every card in the collection becomes available.
 
-> **Status:** implemented — see [`design/bedjet-card-design.md`](design/bedjet-card-design.md)
-> for the locked specification and [`design/bedjet-card-mockup.html`](design/bedjet-card-mockup.html)
-> for an interactive mockup.
+## Cards
 
-## Features
+| Card | Element | Description |
+| --- | --- | --- |
+| [BedJet](#bedjet) | `custom:sf-bedjet-card` | Compact control card for [BedJet V2 / BedJet 3](https://bedjet.com) via the [ha-bedjet](https://github.com/natekspencer/ha-bedjet) integration |
+
+---
+
+## BedJet
+
+> Design: [`design/bedjet-card-design.md`](design/bedjet-card-design.md) ·
+> Mockup: [`design/bedjet-card-mockup.html`](design/bedjet-card-mockup.html)
+
+### Features
 
 - Target temperature and fan speed as sliders
-- Icon-only mode buttons: Heat / Cool / Dry / Off
+- Icon-only mode control: Heat / Cool / Dry / Off
 - Program select: Turbo, Extended Heat, and biorhythm programs
 - Time remaining with stepper + quick-set chips, paired with run-end time
 - Automatic V2/V3 feature detection (Dry, runtime, program availability)
 
-## Configuration
-
-### Minimal example
+### Configuration
 
 ```yaml
 type: custom:sf-bedjet-card
@@ -42,23 +49,39 @@ step_entity: sensor.master_bedjet_bio_sequence_step
 > Entities for exact `running · step N` tracking. Without it the card falls back
 > to a heuristic (fan running while the climate entity reports `off`).
 
+---
+
 ## Installation
+
+### HACS (recommended)
+
+This collection is not in the HACS default store, so add it as a custom repository:
+
+1. **HACS → ⋮ → Custom repositories**
+2. **Repository:** `spfncer/sf-lovelace` · **Category:** **Dashboard** → **Add**
+3. **HACS → search "SF Lovelace Cards" → Download**
+4. Hard-refresh the browser. HACS registers the resource automatically; on
+   YAML-mode dashboards add it yourself:
+
+```yaml
+resources:
+  - url: /hacsfiles/sf-lovelace/sf-lovelace.js
+    type: module
+```
 
 ### Manual
 
-1. Download `sf-bedjet-card.js` from the [latest release](https://github.com/spfncer/sf-lovelace/releases).
-2. Copy it to `<config>/www/sf-bedjet-card.js`.
+1. Download `sf-lovelace.js` from the [latest release](https://github.com/spfncer/sf-lovelace/releases).
+2. Copy it to `<config>/www/sf-lovelace.js`.
 3. Add a resource entry in your dashboard settings:
 
 ```yaml
 resources:
-  - url: /local/sf-bedjet-card.js
+  - url: /local/sf-lovelace.js
     type: module
 ```
 
-### HACS
-
-Not yet published — manual installation for now.
+---
 
 ## Developer Guide
 
@@ -81,7 +104,7 @@ setup required.
 2. When prompted, click **Reopen in Container** (or run **Dev Containers: Rebuild Container**).
 3. A local Home Assistant instance starts automatically at `http://localhost:8123`.
 4. Log in with `dev` / `dev`.
-5. The built card is served from the container and hot-reloads on every save
+5. The bundle is served from the container and hot-reloads on every save
    (`yarn start` is launched automatically).
 
 **Requires:** [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension.
@@ -98,11 +121,11 @@ Then add the built file as a Lovelace resource:
 
 ```yaml
 resources:
-  - url: /local/sf-bedjet-card.js
+  - url: /local/sf-lovelace.js
     type: module
 ```
 
-Copy or symlink `dist/sf-bedjet-card.js` into your HA `www/` folder, or use the
+Copy or symlink `dist/sf-lovelace.js` into your HA `www/` folder, or use the
 devcontainer where this is handled automatically.
 
 ### Available scripts
@@ -118,24 +141,44 @@ devcontainer where this is handled automatically.
 
 ```
 src/
-├── sf-bedjet-card.ts             # Main card element — LitElement subclass
-├── editor.ts                     # Visual editor — implements LovelaceCardEditor
-├── types.ts                      # TypeScript interfaces for all config fields
-├── const.ts                      # CARD_VERSION constant
-├── action-handler-directive.ts   # Lit directive: tap / hold / double-tap gestures
-└── localize/
-    ├── localize.ts               # i18n helper
-    └── languages/
-        ├── en.json               # English strings
-        ├── es.json               # Spanish strings
-        └── nb.json               # Norwegian strings
+├── index.ts                       # Bundle entry — imports every card so it registers
+├── cards/
+│   └── bedjet/
+│       ├── bedjet-card.ts         # Main card element — LitElement subclass
+│       ├── bedjet-card-editor.ts  # Visual editor — implements LovelaceCardEditor
+│       └── bedjet-card-types.ts   # TypeScript interfaces for the card config
+└── shared/
+    ├── const.ts                   # CARD_VERSION constant
+    ├── action-handler-directive.ts# Lit directive: tap / hold / double-tap gestures
+    └── localize/
+        ├── localize.ts            # i18n helper
+        └── languages/
+            ├── en.json            # English strings
+            ├── es.json            # Spanish strings
+            └── nb.json            # Norwegian strings
 dist/
-└── sf-bedjet-card.js             # Build output — serve this to HA
+└── sf-lovelace.js                 # Build output — serve this to HA
 
 design/
-├── bedjet-card-design.md         # Locked design specification
-└── bedjet-card-mockup.html       # Interactive design mockup (fake data)
+├── bedjet-card-design.md          # Locked design specification
+└── bedjet-card-mockup.html        # Interactive design mockup (fake data)
 ```
+
+### Adding a card to the collection
+
+1. Create `src/cards/<card>/` with your card element and (optionally) an editor.
+2. Register it with `@customElement(...)` and push a `window.customCards` entry so it
+   shows up in the picker.
+3. Import the card at the top of `src/index.ts` so it is included in the bundle.
+4. Add a row to the Cards table above.
+
+### Localization
+
+New translation keys go in `src/shared/localize/languages/*.json`, namespaced per card
+(e.g. `bedjet.*`). Add the same keys to **every** language file.
+
+To add a language: copy `en.json`, translate the values (keep keys identical), then
+import and register it in `src/shared/localize/localize.ts`.
 
 ### Toolchain summary
 
@@ -155,11 +198,12 @@ design/
 
 ### Action handler directive
 
-`action-handler-directive.ts` is a Lit directive that attaches gesture recognisers to any
-element. Wire it up with the `actionHandler()` function and listen for the `@action` event:
+`shared/action-handler-directive.ts` is a Lit directive that attaches gesture recognisers
+to any element. Wire it up with the `actionHandler()` function and listen for the `@action`
+event:
 
 ```typescript
-import { actionHandler } from './action-handler-directive';
+import { actionHandler } from '../../shared/action-handler-directive';
 import { handleAction, ActionHandlerEvent } from 'custom-card-helpers';
 
 // In your render():
@@ -185,11 +229,7 @@ private _handleAction(ev: ActionHandlerEvent): void {
 | Double tap    | Two taps within 250 ms              |
 | Keyboard      | Enter or Space triggers tap         |
 
-### Adding a new language
-
-1. Copy `src/localize/languages/en.json` to `src/localize/languages/<lang>.json`.
-2. Translate the values (keep all keys identical).
-3. Import and register the new translations in `src/localize/localize.ts`.
+---
 
 ## Troubleshooting
 
@@ -201,8 +241,8 @@ Your bundler is transpiling Lit's class syntax down to ES5. Ensure `rollup.confi
 `terser({ ecma: 2020 })` and `typescript({ compilerOptions: { target: 'ES2022' } })`.
 
 **Visual editor not opening**
-Check the browser console for import errors from the dynamic `import('./editor')` in
-`getConfigElement`. Also confirm the `sf-bedjet-card-editor` custom element tag matches
+Check the browser console for import errors from the dynamic `import('./bedjet-card-editor')`
+in `getConfigElement`. Also confirm the `sf-bedjet-card-editor` custom element tag matches
 what `getConfigElement` creates.
 
 **General Lovelace plugin troubleshooting**

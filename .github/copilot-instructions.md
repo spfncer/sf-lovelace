@@ -18,17 +18,20 @@ yarn lint
 
 ### Primary files
 
-- `src/sf-bedjet-card.ts` — main card implementation
-- `src/editor.ts` — visual editor (`LovelaceCardEditor`)
-- `src/types.ts` — card config and type definitions
-- `src/action-handler-directive.ts` — tap/hold/double-tap directive
-- `src/localize/localize.ts` — localization helper
-- `src/localize/languages/en.json` and `src/localize/languages/nb.json` — translation files
+- `src/index.ts` — bundle entry; imports every card so it registers
+- `src/cards/bedjet/bedjet-card.ts` — BedJet card implementation
+- `src/cards/bedjet/bedjet-card-editor.ts` — BedJet visual editor (`LovelaceCardEditor`)
+- `src/cards/bedjet/bedjet-card-types.ts` — BedJet config and type definitions
+- `src/shared/action-handler-directive.ts` — tap/hold/double-tap directive
+- `src/shared/const.ts` — `CARD_VERSION` constant
+- `src/shared/localize/localize.ts` — localization helper
+- `src/shared/localize/languages/*.json` — translation files
 - `rollup.config.js` and `rollup.config.dev.js` — production and dev build config
 
 ## Architecture and patterns
 
-- The custom element is `custom:sf-bedjet-card`.
+- Each card lives in `src/cards/<card>/` and is added to the bundle by importing it in `src/index.ts`.
+- The BedJet custom element is `custom:sf-bedjet-card`.
 - Prefer Lit 3 patterns and idiomatic web component structure.
 - Keep configuration shape centralized in `src/types.ts`.
 - Keep editor schema and defaults aligned with runtime card behavior.
