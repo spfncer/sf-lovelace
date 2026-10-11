@@ -77,6 +77,8 @@ fixed card size.
 - iOS-style battery glyph in the header (green + bolt while charging, red when low)
 - Disconnected indicator when the feeder is offline
 - Empty state while no visitor has been collected yet
+- Tap the card to open the native details dialog for the recent visitor **or** its
+  image (configurable) — for the default Recent Visitor sensor, enable it first
 - Sections-layout resizing
 
 ### Configuration
@@ -94,11 +96,17 @@ overrides:
 type: custom:sf-birdbuddy-card
 entity: sensor.backyard_buddy_feeder_state
 name: Backyard Buddy
+tap_entity: recent_visitor   # or image — opens that entity's native more-info dialog
 battery_entity: sensor.backyard_buddy_battery
 charging_entity: binary_sensor.backyard_buddy_charging
 recent_visitor_entity: sensor.backyard_buddy_recent_visitor
 image_entity: image.backyard_buddy_recent_visitor_image
 ```
+
+> **Tap target:** `tap_entity` chooses which entity's native details dialog opens when
+> the card is tapped (`recent_visitor`, the default, or `image`). If the chosen entity
+> isn't available, the card falls back to the other one; if neither exists the card
+> isn't tappable.
 
 > **Species names:** the integration's **Recent Visitor** sensor is **disabled by
 > default**. Enable it in Settings → Devices & Services → Entities to show the species

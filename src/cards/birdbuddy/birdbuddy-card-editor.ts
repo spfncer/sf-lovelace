@@ -22,6 +22,18 @@ export class SfBirdbuddyCardEditor extends LitElement implements LovelaceCardEdi
       selector: { text: {} },
     },
     {
+      name: 'tap_entity',
+      selector: {
+        select: {
+          mode: 'dropdown',
+          options: [
+            { value: 'recent_visitor', label: localize('birdbuddy.tap_recent_visitor') },
+            { value: 'image', label: localize('birdbuddy.tap_image') },
+          ],
+        },
+      },
+    },
+    {
       type: 'expandable',
       name: 'overrides',
       title: localize('birdbuddy.overrides'),
@@ -35,7 +47,11 @@ export class SfBirdbuddyCardEditor extends LitElement implements LovelaceCardEdi
   ];
 
   public setConfig(config: SfBirdbuddyCardConfig): void {
-    this._config = { ...config };
+    this._config = {
+      ...config,
+      // Seed the effective default so the dropdown shows a value on first open.
+      tap_entity: config.tap_entity ?? 'recent_visitor',
+    };
     this.requestUpdate();
   }
 

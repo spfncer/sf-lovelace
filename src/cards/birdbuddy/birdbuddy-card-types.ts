@@ -9,6 +9,14 @@ declare global {
 }
 
 /**
+ * Entity whose native more-info dialog opens when the card is tapped.
+ *
+ * `recent_visitor` targets the Recent Visitor sensor (species + timestamp);
+ * `image` targets the Recent Visitor image entity.
+ */
+export type BirdbuddyTapEntity = 'recent_visitor' | 'image';
+
+/**
  * Card configuration.
  *
  * The card is anchored on a single Bird Buddy "Feeder State" sensor. Every
@@ -22,6 +30,12 @@ export interface SfBirdbuddyCardConfig extends LovelaceCardConfig {
   entity: string;
   /** Header label override (defaults to the device registry name). */
   name?: string;
+  /**
+   * Which entity's native more-info dialog opens when the card is tapped.
+   * Defaults to `recent_visitor`, falling back to the other entity when the
+   * chosen one isn't available.
+   */
+  tap_entity?: BirdbuddyTapEntity;
   /** Override for the `sensor.*_battery` entity. */
   battery_entity?: string;
   /** Override for the `binary_sensor.*_charging` entity. */

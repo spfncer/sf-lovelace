@@ -1,7 +1,7 @@
 import { LitElement, html, nothing, TemplateResult, css, PropertyValues, CSSResultGroup } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HassEntity } from 'home-assistant-js-websocket';
-import { HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
+import { fireEvent, HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
 
 import type {
   BirdbuddyDeviceEntry,
@@ -9,6 +9,7 @@ import type {
   LovelaceGridOptions,
   SfBirdbuddyCardConfig,
 } from './birdbuddy-card-types';
+import { actionHandler } from '../../shared/action-handler-directive';
 import { localize } from '../../shared/localize/localize';
 
 // Registering with window.customCards makes the card appear in the Lovelace
@@ -252,6 +253,40 @@ export class SfBirdbuddyCard extends LitElement {
   }
 
   /**
+   * Entity whose native more-info dialog should open on tap.
+   *
+   * Uses the configured `tap_entity`, preferring `recent_visitor`, and falls
+   * back to the other discovered entity when the chosen one is missing (the
+   * Recent Visitor sensor is disabled by default). Returns undefined only when
+   * neither entity is available, which disables the card's tap affordance.
+   */
+  private _tapEntityId(): string | undefined {
+    const { recentVisitor, image } = this._discover();
+    const wantsImage = (this.config.tap_entity ?? 'recent_visitor') === 'image';
+    const preferred = wantsImage ? image : recentVisitor;
+    const fallback = wantsImage ? recentVisitor : image;
+    for (const id of [preferred, fallback]) {
+      if (id && this.hass.states[id]) {
+        return id;
+      }
+    }
+    return undefined;
+  }
+
+  private _handleAction = (ev: CustomEvent<{ action?: string }>): void => {
+    if (ev.detail?.action !== 'tap') {
+      return;
+    }
+    const entityId = this._tapEntityId();
+    if (!entityId) {
+      return;
+    }
+    // Canonical way for a custom card to open Home Assistant's native
+    // more-info dialog: a bubbling, composed `hass-more-info` event.
+    fireEvent(this, 'hass-more-info', { entityId });
+  };
+
+  /**
    * "Seen X ago" from the recent visitor sensor's `last_changed`.
    *
    * The sensor (not the image entity) carries the "when the visitor was
@@ -309,8 +344,21 @@ export class SfBirdbuddyCard extends LitElement {
     const photoUrl = this._photoUrl();
     const deviceName = this._deviceName(stateObj);
 
+    // The card is tappable only when a more-info target is actually available.
+    const tapEntityId = this._tapEntityId();
+    const tapStateObj = tapEntityId ? this.hass.states[tapEntityId] : undefined;
+    const tapLabel =
+      (tapStateObj?.attributes.friendly_name as string | undefined) ?? localize('birdbuddy.open_details');
+
     return html`
-      <ha-card>
+      <ha-card
+        class=${tapEntityId ? 'interactive' : ''}
+        role=${tapEntityId ? 'button' : nothing}
+        tabindex=${tapEntityId ? '0' : nothing}
+        aria-label=${tapEntityId ? tapLabel : nothing}
+        @action=${this._handleAction}
+        ${actionHandler({ disabled: !tapEntityId })}
+      >
         <div class="header">
           <span class="devname" title=${deviceName}>${deviceName}</span>
           <div class="henglyph">${this._renderStatus(offline)}</div>
@@ -409,6 +457,19 @@ export class SfBirdbuddyCard extends LitElement {
       }
       ha-card > * {
         flex-shrink: 0;
+      }
+
+      /* Tappable card — mirrors the native image card's pointer cursor.
+         Native hover/press feedback is intentionally not drawn (per design). */
+      ha-card.interactive {
+        cursor: pointer;
+      }
+      ha-card.interactive:focus {
+        outline: none;
+      }
+      ha-card.interactive:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: -2px;
       }
 
       /* ── Header: device name + right-anchored status glyph ────── */
