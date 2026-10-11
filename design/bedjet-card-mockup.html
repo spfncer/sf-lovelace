@@ -56,11 +56,13 @@
     padding: 10px 0 16px; transition: opacity .2s;
   }
   .card.is-off .readout { opacity: .5; }
-  .ro-col { text-align: center; min-width: 96px; }
+  .ro-col { text-align: center; min-width: 110px; }
+  .ro-value { display: flex; align-items: baseline; justify-content: center; gap: 3px; }
   .ro-num {
     font-size: 44px; font-weight: 300; line-height: 1.05;
     color: var(--primary-text-color); font-variant-numeric: tabular-nums;
   }
+  .ro-unit { font-size: 22px; font-weight: 300; color: var(--secondary-text-color); }
   .ro-label { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
   .ro-divider { width: 1px; height: 40px; background: var(--divider-color); }
 
@@ -188,6 +190,10 @@
       <button data-v3="false">V2</button>
       <button data-v3="true" class="on">V3</button>
     </div>
+    <div class="seg" id="unitSeg">
+      <button data-unit="c" class="on">°C</button>
+      <button data-unit="f">°F</button>
+    </div>
   </div>
   <div class="hint">Mockup with fake data — click around, every control is live.</div>
 
@@ -198,12 +204,16 @@
 
     <div class="readout">
       <div class="ro-col">
-        <div class="ro-num" id="roSetting">35°</div>
+        <div class="ro-value">
+          <span class="ro-num" id="roSetting">35</span><span class="ro-unit" id="roSettingUnit">°C</span>
+        </div>
         <div class="ro-label">Setting</div>
       </div>
       <div class="ro-divider"></div>
       <div class="ro-col">
-        <div class="ro-num" id="roActual">28°</div>
+        <div class="ro-value">
+          <span class="ro-num" id="roActual">28.5</span><span class="ro-unit" id="roActualUnit">°C</span>
+        </div>
         <div class="ro-label">Actual</div>
       </div>
     </div>
@@ -293,8 +303,8 @@
     The real card reads/writes <b>climate.<device></b> (mode / temp / fan / presets),
     <b>number.<device>_runtime_remaining</b>, <b>sensor.<device>_run_end_time</b>.<br>
     Switching to V2 previews feature detection: Dry and Time remaining disappear and the select
-    keeps only None · Turbo. Temperatures are shown in °C as an example — the real card renders
-    whatever unit the climate entity exposes (°F instances automatically show °F).
+    keeps only None · Turbo. Toggle °C/°F to preview unit-following behavior — the real card
+    renders whatever unit the climate entity exposes.
   </div>
 
 <script>
@@ -312,7 +322,7 @@
   };
 
   const S = {
-    state: "heat", v3: true,
+    state: "heat", v3: true, unit: "c",
     temp: 35, fan: 75, air: 28.5,
     remaining: 90, program: "SleepCloud", step: 1,
   };
@@ -321,6 +331,7 @@
   const els = {
     card: $("card"),
     roSetting: $("roSetting"), roActual: $("roActual"),
+    roSettingUnit: $("roSettingUnit"), roActualUnit: $("roActualUnit"),
     tempSlider: $("tempSlider"), tempVal: $("tempVal"),
     fanSlider: $("fanSlider"), fanVal: $("fanVal"),
     progSelect: $("progSelect"), progStep: $("progStep"),
@@ -334,6 +345,20 @@
     m = Math.max(0, Math.round(m));
     const h = Math.floor(m / 60), mm = m % 60;
     return h ? (mm ? `${h}h ${mm}m` : `${h}h`) : `${mm}m`;
+  };
+
+  // Display units — internal state stays in °C (native), rendering converts.
+  // The real card reads the unit from climate.attributes.temperature_unit.
+  const UNITS = {
+    c: {
+      suffix: "°C", min: 19, max: 43, step: 0.5,
+      toDisplay: (c) => c, fromDisplay: (v) => v, fmt: fmtTemp,
+    },
+    f: {
+      suffix: "°F", min: 66, max: 110, step: 1,
+      toDisplay: (c) => c * 9 / 5 + 32, fromDisplay: (v) => (v - 32) * 5 / 9,
+      fmt: (v) => Math.round(v),
+    },
   };
   const endsAt = () => {
     if (S.remaining <= 0 || S.state === "off") return "ends —";
@@ -364,10 +389,13 @@
 
   function render() {
     const st = S.state;
+    const u = UNITS[S.unit];
 
-    // two-number readout
-    els.roSetting.textContent = `${fmtTemp(S.temp)}°`;
-    els.roActual.textContent = `${fmtTemp(S.air)}°`;
+    // two-number readout: value large, unit smaller and muted beside it
+    els.roSetting.textContent = u.fmt(u.toDisplay(S.temp));
+    els.roActual.textContent = u.fmt(u.toDisplay(S.air));
+    els.roSettingUnit.textContent = u.suffix;
+    els.roActualUnit.textContent = u.suffix;
     els.card.classList.toggle("is-off", st === "off");
 
     // mode buttons — Heat icon also lights for Turbo / Extended Heat
@@ -382,11 +410,14 @@
     const slidersLocked = ["off", "turbo", "program"].includes(st);
     els.tempSlider.disabled = slidersLocked;
     els.fanSlider.disabled = slidersLocked;
-    els.tempSlider.value = S.temp;
+    els.tempSlider.min = u.min;
+    els.tempSlider.max = u.max;
+    els.tempSlider.step = u.step;
+    els.tempSlider.value = u.toDisplay(S.temp);
     els.fanSlider.value = S.fan;
     setFill(els.tempSlider);
     setFill(els.fanSlider);
-    els.tempVal.textContent = `${fmtTemp(S.temp)}°C`;
+    els.tempVal.textContent = `${u.fmt(u.toDisplay(S.temp))}${u.suffix}`;
     els.fanVal.textContent = `${S.fan}%`;
 
     // program select — mirrors HA's native preset menu
@@ -420,6 +451,8 @@
       b.classList.toggle("on", b.dataset.state === st));
     document.querySelectorAll("#verSeg button").forEach((b) =>
       b.classList.toggle("on", (b.dataset.v3 === "true") === S.v3));
+    document.querySelectorAll("#unitSeg button").forEach((b) =>
+      b.classList.toggle("on", b.dataset.unit === S.unit));
   }
 
   // ── wiring ────────────────────────────────────────────────
@@ -430,6 +463,8 @@
     }));
   document.querySelectorAll("#verSeg button").forEach((b) =>
     b.addEventListener("click", () => { S.v3 = b.dataset.v3 === "true"; applyState(S.state); }));
+  document.querySelectorAll("#unitSeg button").forEach((b) =>
+    b.addEventListener("click", () => { S.unit = b.dataset.unit; render(); }));
 
   document.querySelectorAll(".mode").forEach((b) =>
     b.addEventListener("click", () => applyState(b.dataset.mode)));
@@ -449,7 +484,10 @@
   document.querySelectorAll(".chip").forEach((c) =>
     c.addEventListener("click", () => { S.remaining = +c.dataset.min; render(); }));
 
-  els.tempSlider.addEventListener("input", () => { S.temp = +els.tempSlider.value; render(); });
+  els.tempSlider.addEventListener("input", () => {
+    S.temp = UNITS[S.unit].fromDisplay(+els.tempSlider.value);
+    render();
+  });
   els.fanSlider.addEventListener("input", () => { S.fan = +els.fanSlider.value; render(); });
 
   // ── ambient simulation: program steps advance, runtime counts down ──

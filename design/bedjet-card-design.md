@@ -23,7 +23,7 @@ entities are auto-discovered through the device registry (manual overrides in co
 ┌─────────────────────────────────────────────┐
 │ Master BedJet                               │  header: device name only
 ├─────────────────────────────────────────────┤
-│        35°         │         28°           │  two-number readout
+│       35°C         │       28.5°C         │  two-number readout: value + unit suffix
 │       Setting      │        Actual         │  (target | current temperature)
 │                                             │
 │   [ 🔥 ][ ❄ ][ 💧 ][ ⏻ ]                  │  mode buttons — ha-control-button-group,
@@ -44,7 +44,7 @@ entities are auto-discovered through the device registry (manual overrides in co
 
 | Element | Reads | Writes |
 |---|---|---|
-| Setting \| Actual readout | `climate.*`: `target_temperature`, `current_temperature` | — |
+| Setting \| Actual readout | `climate.*`: `target_temperature`, `current_temperature`, each rendered with the `temperature_unit` suffix | — |
 | Temp slider | `climate.*`: `target_temperature`, `min_temp`, `max_temp` | `climate.set_temperature` |
 | Fan slider | `climate.*`: `fan_mode` (`"75%"`) | `climate.set_fan_mode` ⚠ **not** `fan.set_percentage` — the fan entity implicitly turns the device on in **Cool** when it is off |
 | Mode buttons | `hvac_mode`; `hvac_modes` (Dry only present on V3) | `climate.set_hvac_mode` |
@@ -141,7 +141,7 @@ There is no dedicated status line — state is visible through the controls them
   unit — readout, slider values, and `climate.set_temperature` payloads. Slider range from
   `min_temp`/`max_temp` (already converted); step = 0.5 for °C, 1 for °F (or
   `target_temperature_step` when the integration provides it). No hardcoded units; the
-  mockup just illustrates °C.
+  mockup has a °C/°F toggle to preview both.
 
 ## 7. Config sketch
 
@@ -170,8 +170,9 @@ entity: climate.master_bedjet   # everything else auto-discovered via device reg
 7. **No status line** — header shows the device name only; state is visible through the
    controls (active mode button, select value, runtime row).
 8. **Readout** — two numbers side by side: **Setting** (target) | **Actual** (current
-   temperature), separated by a divider; large numbers, small muted labels. The ambient
-   temperature sensor is no longer displayed on the card.
+   temperature), separated by a divider; large numbers, small muted labels, with the unit
+   suffix rendered smaller and muted beside each value (mirroring HA's climate UI). The
+   ambient temperature sensor is no longer displayed on the card.
 9. **Temperature units** — follow HA: display and send in the climate entity's
    `temperature_unit` attribute (which HA converts to the instance's configured unit).
    No unit option on the card, no conversion code.
