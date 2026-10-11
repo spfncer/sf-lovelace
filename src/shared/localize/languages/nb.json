@@ -34,5 +34,25 @@
     "hours_short": "t",
     "minutes_short": "min",
     "no_entity": "Velg en BedJet-klimaenhet."
+  },
+  "birdbuddy": {
+    "entity": "Bird Buddy-mater",
+    "name": "Navn",
+    "overrides": "Enhetsoverstyringer",
+    "battery_entity": "Batteri (sensor)",
+    "charging_entity": "Lading (binær sensor)",
+    "recent_visitor_entity": "Siste besøkende (sensor)",
+    "image_entity": "Bilde av siste besøkende",
+    "offline": "Frakoblet",
+    "charging": "Lader",
+    "battery": "Batteri",
+    "no_visitors": "Ingen besøkende ennå",
+    "waiting": "Venter på neste postkort",
+    "seen_just_now": "Sett akkurat nå",
+    "seen_ago": "Sett for {time} siden",
+    "min_short": "min",
+    "hr_short": "t",
+    "day_short": "d",
+    "no_entity": "Velg en Bird Buddy-mater."
   }
 }

@@ -34,5 +34,25 @@
     "hours_short": "h",
     "minutes_short": "min",
     "no_entity": "Selecciona una entidad de clima BedJet."
+  },
+  "birdbuddy": {
+    "entity": "Comedero Bird Buddy",
+    "name": "Nombre",
+    "overrides": "Anulaciones de entidades",
+    "battery_entity": "Batería (sensor)",
+    "charging_entity": "Carga (sensor binario)",
+    "recent_visitor_entity": "Visitante reciente (sensor)",
+    "image_entity": "Imagen del visitante reciente",
+    "offline": "Desconectado",
+    "charging": "Cargando",
+    "battery": "Batería",
+    "no_visitors": "Aún sin visitantes",
+    "waiting": "Esperando la próxima postal",
+    "seen_just_now": "Visto ahora mismo",
+    "seen_ago": "Visto hace {time}",
+    "min_short": "min",
+    "hr_short": "h",
+    "day_short": "d",
+    "no_entity": "Selecciona un comedero Bird Buddy."
   }
 }

@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sf-birdbuddy-card — design mockup</title>
+<style>
+  :root {
+    /* HA theme variables — fallbacks match HA's default dark theme.
+       The real card inherits these from the active HA theme. */
+    --primary-color: #03a9f5;
+    --text-primary-color: #ffffff;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9bab;
+    --divider-color: rgba(255, 255, 255, 0.12);
+    --secondary-background-color: #262626;
+    --card-background-color: #1c1c1c;
+    --ha-card-border-radius: 12px;
+    --ha-card-box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+    /* mockup page chrome (not part of the card) */
+    --page-bg: #111111;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page-bg); color: var(--primary-text-color);
+    font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 16px 64px; gap: 14px;
+  }
+
+  /* ── preview controls (not part of the card) ─────────────── */
+  .previewbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; max-width: 720px; }
+  .seg { display: flex; background: #1a1a1a; border: 1px solid var(--divider-color); border-radius: 10px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--secondary-text-color);
+    padding: 7px 13px; cursor: pointer; font-size: 12.5px; font-weight: 500;
+  }
+  .seg button.on { background: rgba(3, 169, 245, .18); color: #fff; }
+  .seglabel { font-size: 11.5px; color: #616161; margin-right: -4px; }
+  .hint { font-size: 12px; color: #616161; }
+  .foot { font-size: 12px; color: #616161; max-width: 440px; text-align: center; line-height: 1.5; }
+
+  /* ── the card ────────────────────────────────────────────── */
+  .card {
+    width: 340px; max-width: 100%; background: var(--card-background-color);
+    border-radius: var(--ha-card-border-radius); box-shadow: var(--ha-card-box-shadow);
+    overflow: hidden;
+  }
+
+  /* header: device name + right-anchored iOS battery / offline glyph.
+     The glyph is vertically centered against the header (true vertical center). */
+  .header { display: flex; align-items: center; gap: 12px; padding: 14px 18px 12px; }
+  .devname {
+    flex: 1; min-width: 0; font-size: 16px; font-weight: 600; line-height: 1.3;
+    color: var(--primary-text-color); overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .henglyph { display: flex; align-items: center; flex: 0 0 auto; color: var(--secondary-text-color); }
+
+  /* iOS-style battery (fill + bolt when charging, red when low) */
+  .batt { display: inline-flex; align-items: center; color: var(--secondary-text-color); }
+  .batt-body {
+    position: relative; display: block; width: 24px; height: 12.5px;
+    border: 1.5px solid currentColor; border-radius: 4px; padding: 1px;
+  }
+  .batt-fill {
+    display: block; height: 100%; width: 82%;
+    background: rgba(255, 255, 255, 0.85); border-radius: 2px;
+    transition: width .25s ease, background-color .2s ease;
+  }
+  .batt-bolt { position: absolute; inset: -1px; margin: auto; width: 70%; height: 70%; display: none; }
+  .batt-tip { display: block; width: 2px; height: 5px; margin-left: 1.5px; background: currentColor; border-radius: 0 1.5px 1.5px 0; }
+
+  .offline { display: inline-flex; color: var(--secondary-text-color); }
+  .offline svg { width: 18px; height: 18px; }
+
+  /* hero: full-bleed portrait "photo" (real card renders entity_picture, 3:4) */
+  .hero { position: relative; aspect-ratio: 3 / 4; background: linear-gradient(150deg, var(--hero-from), var(--hero-to)); }
+  .hero .watermark {
+    position: absolute; inset: 0; margin: auto; width: 46%; height: 46%;
+    color: rgba(255, 255, 255, 0.13); pointer-events: none;
+  }
+  .scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 58%, rgba(0,0,0,0.72) 100%); }
+  .badge {
+    position: absolute; top: 12px; right: 12px;
+    padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: rgba(0,0,0,0.5); color: #fff; backdrop-filter: blur(4px);
+  }
+  .herotext { position: absolute; left: 16px; right: 16px; bottom: 12px; color: #fff; }
+  .species { font-size: 22px; font-weight: 600; line-height: 1.15; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+  .seen { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; color: rgba(255,255,255,0.85); }
+  .seen svg { width: 14px; height: 14px; }
+
+  /* empty state (no recent visitor yet) */
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; aspect-ratio: 3 / 4; color: var(--secondary-text-color); }
+  .empty svg { width: 56px; height: 56px; color: #4a4a55; }
+  .emptytitle { font-size: 15px; font-weight: 600; color: var(--primary-text-color); }
+  .emptysub { font-size: 12.5px; }
+
+  .card.is-offline .hero { opacity: .5; }
+  .card.is-offline .empty { opacity: .6; }
+
+  /* enter animation for the species label when a new visitor arrives */
+  @keyframes pop { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .herotext.pop { animation: pop .28s ease; }
+</style>
+</head>
+<body>
+
+  <div class="previewbar">
+    <span class="seglabel">visitor</span>
+    <div class="seg" id="visSeg">
+      <button data-v="robin" class="on">Robin</button>
+      <button data-v="cardinal">Cardinal</button>
+      <button data-v="bluejay">Blue Jay</button>
+      <button data-v="multiple">Robin +2</button>
+      <button data-v="none">None</button>
+    </div>
+    <span class="seglabel">title</span>
+    <div class="seg" id="nameSeg">
+      <button data-n="short" class="on">Short</button>
+      <button data-n="long">Long</button>
+    </div>
+    <span class="seglabel">state</span>
+    <div class="seg" id="stateSeg">
+      <button data-s="online" class="on">Online</button>
+      <button data-s="capture">Taking postcard</button>
+      <button data-s="offline">Offline</button>
+      <button data-s="offgrid">Off-grid</button>
+    </div>
+    <span class="seglabel">battery</span>
+    <div class="seg" id="battSeg">
+      <button data-b="high" class="on">High</button>
+      <button data-b="medium">Medium</button>
+      <button data-b="low">Low</button>
+    </div>
+    <span class="seglabel">charging</span>
+    <div class="seg" id="chgSeg">
+      <button data-c="0" class="on">No</button>
+      <button data-c="1">Yes</button>
+    </div>
+  </div>
+  <div class="hint">Mockup with fake data — click around, every control is live.</div>
+
+  <div class="card" id="card">
+    <div class="header">
+      <div class="devname" id="devName">Backyard Buddy</div>
+      <div class="henglyph">
+        <span class="offline" id="offline" title="Offline" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12,21L15.6,16.2C14.6,15.45 13.35,15 12,15C10.65,15 9.4,15.45 8.4,16.2L12,21M12,3C7.95,3 4.21,4.34 1.2,6.6L4.6,11C6.55,9.5 9.15,8.5 12,8.5C14.85,8.5 17.45,9.5 19.4,11L22.8,6.6C19.79,4.34 16.05,3 12,3M12,7C9.72,7 7.57,7.5 5.7,8.35L8.85,12.45C9.78,11.88 10.85,11.5 12,11.5C13.15,11.5 14.22,11.88 15.15,12.45L18.3,8.35C16.43,7.5 14.28,7 12,7Z" fill="currentColor"/>
+            <line x1="3.5" y1="3.5" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="batt" id="batt" title="82%">
+          <span class="batt-body">
+            <span class="batt-fill" id="battFill"></span>
+            <svg class="batt-bolt" id="battBolt" viewBox="0 0 24 24" fill="rgba(0,0,0,0.85)"><path d="M11,15H6L13,1V9H18L11,23V15Z"/></svg>
+          </span>
+          <span class="batt-tip"></span>
+        </span>
+      </div>
+    </div>
+
+    <div class="hero" id="hero">
+      <svg class="watermark" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true">
+        <ellipse cx="22" cy="27" rx="13" ry="10"/>
+        <circle cx="33" cy="15" r="7"/>
+        <path d="M40 13 L47 14 L40 18 Z"/>
+        <path d="M12 23 L1.5 16 L13 30 Z"/>
+      </svg>
+      <div class="scrim"></div>
+      <div class="badge" id="badge" style="display:none">+2</div>
+      <div class="herotext" id="herotext">
+        <div class="species" id="speciesName">American Robin</div>
+        <div class="seen">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22C6.47,22 2,17.5 2,12A10,10 0 0,1 12,2M12.5,7V12.25L17,14.92L16.25,16.15L11,13V7H12.5Z"/></svg>
+          <span id="seenText">Seen 2 min ago</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="empty" id="empty" style="display:none">
+      <svg viewBox="0 0 48 48" fill="currentColor">
+        <ellipse cx="22" cy="27" rx="13" ry="10"/>
+        <circle cx="33" cy="15" r="7"/>
+        <path d="M40 13 L47 14 L40 18 Z"/>
+        <path d="M12 23 L1.5 16 L13 30 Z"/>
+      </svg>
+      <div class="emptytitle">No visitors yet</div>
+      <div class="emptysub">Waiting for the next postcard</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Mockup only (fake data). The real card renders the <b>image entity / <code>entity_picture</code></b>
+    for the portrait hero photo (<b>3:4</b>, matching a Bird Buddy postcard — signed, time-limited
+    <code>contentUrl</code>/<code>thumbnailUrl</code>), the Recent Visitor sensor for the species name,
+    and listens to <code>birdbuddy_new_postcard</code> for live updates. The header battery is iOS-style:
+    bolt + green when charging, red when running low, and a disconnected symbol shows in its place when the
+    feeder is offline (no status pill otherwise). The gradient + silhouette stand in for a real bird
+    photo here.
+  </div>
+
+<script>
+  // ── fake device state ─────────────────────────────────────
+  const VISITORS = {
+    robin:    { name: 'American Robin',     g: ['#6b4a3a', '#2a2019'], ago: 'Seen 2 min ago',   plus: 0 },
+    cardinal: { name: 'Northern Cardinal',  g: ['#7a1f24', '#2a0d10'], ago: 'Seen 45 min ago',  plus: 0 },
+    bluejay:  { name: 'Blue Jay',           g: ['#2f5d7a', '#12222e'], ago: 'Seen 3 hr ago',    plus: 0 },
+    multiple: { name: 'American Robin',     g: ['#4a3a6b', '#1e1a30'], ago: 'Seen yesterday',   plus: 2 },
+    none:     null,
+  };
+  const STATES = {
+    online:  { label: 'Online',            color: '#6fcf6f' },
+    capture: { label: 'Taking postcard',   color: '#f5a623' },
+    offline: { label: 'Offline',           color: '#9b9bab' },
+    offgrid: { label: 'Off-grid',          color: '#56d4dd' },
+  };
+  const BATT = {
+    high:   { pct: 82 },
+    medium: { pct: 46 },
+    low:    { pct: 12 },
+  };
+  const NAMES = {
+    short: 'Backyard Buddy',
+    long:  'North Garden Motion Camera Bird Feeder',
+  };
+
+  const S = {
+    visitor: 'robin', state: 'online', batt: 'high', charging: false, name: 'short',
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    card: $('card'), hero: $('hero'), empty: $('empty'),
+    devName: $('devName'), offline: $('offline'),
+    herotext: $('herotext'), badge: $('badge'),
+    speciesName: $('speciesName'), seenText: $('seenText'),
+    batt: $('batt'), battFill: $('battFill'), battBolt: $('battBolt'),
+  };
+
+  function render(animate) {
+    const v = VISITORS[S.visitor];
+    const pct = BATT[S.batt].pct;
+
+    // offline replaces the battery with a disconnected symbol
+    const offline = S.state === 'offline';
+    els.offline.style.display = offline ? '' : 'none';
+    els.batt.style.display = offline ? 'none' : '';
+
+    // device name (wraps on long names; hover shows full)
+    const nm = NAMES[S.name];
+    els.devName.textContent = nm;
+    els.devName.setAttribute('title', nm);
+
+    // iOS battery: fill width + color, bolt only while charging, red when low
+    let fillColor = 'rgba(255, 255, 255, 0.85)';
+    let bolt = false;
+    if (S.charging) { fillColor = '#30d158'; bolt = true; }
+    else if (pct <= 20) { fillColor = '#ff453a'; }
+    els.battFill.style.width = pct + '%';
+    els.battFill.style.backgroundColor = fillColor;
+    els.battBolt.style.display = bolt ? 'block' : 'none';
+    els.batt.setAttribute('title', (S.charging ? 'Charging · ' : '') + pct + '%');
+
+    // hero vs empty
+    const hasVisitor = !!v;
+    els.hero.style.display = hasVisitor ? '' : 'none';
+    els.empty.style.display = hasVisitor ? 'none' : '';
+
+    if (hasVisitor) {
+      els.hero.style.setProperty('--hero-from', v.g[0]);
+      els.hero.style.setProperty('--hero-to', v.g[1]);
+      els.speciesName.textContent = v.name;
+      els.seenText.textContent = v.ago;
+      els.badge.style.display = v.plus > 0 ? '' : 'none';
+      els.badge.textContent = '+' + v.plus;
+      if (animate) {
+        els.herotext.classList.remove('pop');
+        void els.herotext.offsetWidth; // reflow to restart the animation
+        els.herotext.classList.add('pop');
+      }
+    }
+
+    // offline dims the card
+    els.card.classList.toggle('is-offline', S.state === 'offline');
+
+    // preview bar sync
+    document.querySelectorAll('#visSeg button').forEach((x) => x.classList.toggle('on', x.dataset.v === S.visitor));
+    document.querySelectorAll('#nameSeg button').forEach((x) => x.classList.toggle('on', x.dataset.n === S.name));
+    document.querySelectorAll('#stateSeg button').forEach((x) => x.classList.toggle('on', x.dataset.s === S.state));
+    document.querySelectorAll('#battSeg button').forEach((x) => x.classList.toggle('on', x.dataset.b === S.batt));
+    document.querySelectorAll('#chgSeg button').forEach((x) => x.classList.toggle('on', (x.dataset.c === '1') === S.charging));
+  }
+
+  // ── wiring ────────────────────────────────────────────────
+  document.querySelectorAll('#visSeg button').forEach((b) =>
+    b.addEventListener('click', () => { S.visitor = b.dataset.v; render(true); }));
+  document.querySelectorAll('#nameSeg button').forEach((b) =>
+    b.addEventListener('click', () => { S.name = b.dataset.n; render(false); }));
+  document.querySelectorAll('#stateSeg button').forEach((b) =>
+    b.addEventListener('click', () => { S.state = b.dataset.s; render(false); }));
+  document.querySelectorAll('#battSeg button').forEach((b) =>
+    b.addEventListener('click', () => { S.batt = b.dataset.b; render(false); }));
+  document.querySelectorAll('#chgSeg button').forEach((b) =>
+    b.addEventListener('click', () => { S.charging = b.dataset.c === '1'; render(false); }));
+
+  render(false);
+</script>
+</body>
+</html>

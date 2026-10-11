@@ -34,5 +34,25 @@
     "hours_short": "h",
     "minutes_short": "m",
     "no_entity": "Please select a BedJet climate entity."
+  },
+  "birdbuddy": {
+    "entity": "Bird Buddy feeder",
+    "name": "Name",
+    "overrides": "Entity overrides",
+    "battery_entity": "Battery (sensor)",
+    "charging_entity": "Charging (binary sensor)",
+    "recent_visitor_entity": "Recent visitor (sensor)",
+    "image_entity": "Recent visitor image",
+    "offline": "Offline",
+    "charging": "Charging",
+    "battery": "Battery",
+    "no_visitors": "No visitors yet",
+    "waiting": "Waiting for the next postcard",
+    "seen_just_now": "Seen just now",
+    "seen_ago": "Seen {time} ago",
+    "min_short": "min",
+    "hr_short": "h",
+    "day_short": "d",
+    "no_entity": "Please select a Bird Buddy feeder entity."
   }
 }

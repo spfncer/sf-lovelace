@@ -9,6 +9,7 @@ add one resource and every card in the collection becomes available.
 | Card | Element | Description |
 | --- | --- | --- |
 | [BedJet](#bedjet) | `custom:sf-bedjet-card` | Compact control card for [BedJet V2 / BedJet 3](https://bedjet.com) via the [ha-bedjet](https://github.com/natekspencer/ha-bedjet) integration |
+| [Bird Buddy](#bird-buddy) | `custom:sf-birdbuddy-card` | Latest-visitor postcard card for [ha-birdbuddy](https://github.com/jhansche/ha-birdbuddy) feeders |
 
 ---
 
@@ -60,6 +61,48 @@ card fills its allocated cell: extra height grows the Setting | Actual readout,
 cells smaller than the content clip the bottom rows, and narrow widths scale the
 readout numbers down automatically. Masonry dashboards keep using the classic
 fixed card size.
+
+---
+
+## Bird Buddy
+
+> Design: [`design/birdbuddy-card-design.md`](design/birdbuddy-card-design.md) ·
+> Mockup: [`design/birdbuddy-card-mockup.html`](design/birdbuddy-card-mockup.html)
+
+### Features
+
+- Full-bleed portrait (3:4) photo of the latest visitor, pulled from the feeder's
+  recent-visitor image entity
+- Recognized species name and a "Seen …" recency caption over the photo
+- iOS-style battery glyph in the header (green + bolt while charging, red when low)
+- Disconnected indicator when the feeder is offline
+- Empty state while no visitor has been collected yet
+- Sections-layout resizing
+
+### Configuration
+
+```yaml
+type: custom:sf-birdbuddy-card
+entity: sensor.backyard_buddy_feeder_state
+```
+
+The card anchors on the feeder's **Feeder State** sensor; the battery, charging,
+recent-visitor, and image entities are auto-discovered from the device registry. Optional
+overrides:
+
+```yaml
+type: custom:sf-birdbuddy-card
+entity: sensor.backyard_buddy_feeder_state
+name: Backyard Buddy
+battery_entity: sensor.backyard_buddy_battery
+charging_entity: binary_sensor.backyard_buddy_charging
+recent_visitor_entity: sensor.backyard_buddy_recent_visitor
+image_entity: image.backyard_buddy_recent_visitor_image
+```
+
+> **Species names:** the integration's **Recent Visitor** sensor is **disabled by
+> default**. Enable it in Settings → Devices & Services → Entities to show the species
+> name; the photo still works without it (via the image entity).
 
 ---
 
@@ -155,10 +198,14 @@ devcontainer where this is handled automatically.
 src/
 ├── index.ts                       # Bundle entry — imports every card so it registers
 ├── cards/
-│   └── bedjet/
-│       ├── bedjet-card.ts         # Main card element — LitElement subclass
-│       ├── bedjet-card-editor.ts  # Visual editor — implements LovelaceCardEditor
-│       └── bedjet-card-types.ts   # TypeScript interfaces for the card config
+│   ├── bedjet/
+│   │   ├── bedjet-card.ts         # Main card element — LitElement subclass
+│   │   ├── bedjet-card-editor.ts  # Visual editor — implements LovelaceCardEditor
+│   │   └── bedjet-card-types.ts   # TypeScript interfaces for the card config
+│   └── birdbuddy/
+│       ├── birdbuddy-card.ts      # Main card element — LitElement subclass
+│       ├── birdbuddy-card-editor.ts
+│       └── birdbuddy-card-types.ts
 └── shared/
     ├── const.ts                   # CARD_VERSION constant
     ├── action-handler-directive.ts# Lit directive: tap / hold / double-tap gestures
@@ -173,7 +220,9 @@ dist/
 
 design/
 ├── bedjet-card-design.md          # Locked design specification
-└── bedjet-card-mockup.html        # Interactive design mockup (fake data)
+├── bedjet-card-mockup.html        # Interactive design mockup (fake data)
+├── birdbuddy-card-design.md       # Locked design specification
+└── birdbuddy-card-mockup.html     # Interactive design mockup (fake data)
 ```
 
 ### Adding a card to the collection

@@ -4,6 +4,7 @@ import { localize } from './shared/localize/localize';
 // Side-effect imports register each card element with the browser. Every card
 // in the collection is imported here so the single bundle wires them all up.
 import './cards/bedjet/bedjet-card';
+import './cards/birdbuddy/birdbuddy-card';
 
 console.info(
   `%c  SF-LOVELACE \n%c  ${localize('common.version')} ${CARD_VERSION}    `,
