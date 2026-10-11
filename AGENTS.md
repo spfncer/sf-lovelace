@@ -52,6 +52,11 @@ yarn lint
 - For card config, validate early in `setConfig` and throw actionable errors.
 - Keep `getCardSize` deterministic and aligned with rendered density.
 
+### Quick checklist
+
+- [ ] **Updates:** Keep `useDefineForClassFields: false` with Lit decorators; if overriding `shouldUpdate`, allow relevant `hass` changes through for every entity the card renders. This keeps reactive accessors working so the UI stays in sync with device state.
+- [ ] **Configurable size:** Implement `getGridOptions()` with defaults and resize bounds; make the card fill and adapt to its allocated Sections grid cell, while retaining `getCardSize()` for Masonry.
+
 ## Home Assistant integration
 
 - Use Home Assistant helpers and conventions from `custom-card-helpers`.
