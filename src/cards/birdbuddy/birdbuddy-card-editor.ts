@@ -22,21 +22,36 @@ export class SfBirdbuddyCardEditor extends LitElement implements LovelaceCardEdi
       selector: { text: {} },
     },
     {
-      name: 'tap_entity',
-      selector: {
-        select: {
-          mode: 'dropdown',
-          options: [
-            { value: 'recent_visitor', label: localize('birdbuddy.tap_recent_visitor') },
-            { value: 'image', label: localize('birdbuddy.tap_image') },
-          ],
+      type: 'expandable',
+      name: 'interactions',
+      title: localize('birdbuddy.interactions'),
+      // Without `flatten`, ha-form nests children under `interactions` and the
+      // card never sees them.
+      flatten: true,
+      schema: [
+        {
+          name: 'tap_entity',
+          selector: {
+            select: {
+              mode: 'dropdown',
+              options: [
+                { value: 'recent_visitor', label: localize('birdbuddy.tap_recent_visitor') },
+                { value: 'image', label: localize('birdbuddy.tap_image') },
+              ],
+            },
+          },
         },
-      },
+        { name: 'tap_action', selector: { ui_action: {} } },
+        { name: 'hold_action', selector: { ui_action: {} } },
+        { name: 'double_tap_action', selector: { ui_action: {} } },
+      ],
     },
     {
       type: 'expandable',
       name: 'overrides',
       title: localize('birdbuddy.overrides'),
+      // Same nesting caveat as `interactions` above.
+      flatten: true,
       schema: [
         { name: 'battery_entity', selector: { entity: { domain: 'sensor' } } },
         { name: 'charging_entity', selector: { entity: { domain: 'binary_sensor' } } },
@@ -49,8 +64,11 @@ export class SfBirdbuddyCardEditor extends LitElement implements LovelaceCardEdi
   public setConfig(config: SfBirdbuddyCardConfig): void {
     this._config = {
       ...config,
-      // Seed the effective default so the dropdown shows a value on first open.
+      // Seed the effective defaults so the form shows values on first open.
       tap_entity: config.tap_entity ?? 'recent_visitor',
+      tap_action: config.tap_action ?? { action: 'more-info' },
+      hold_action: config.hold_action ?? { action: 'none' },
+      double_tap_action: config.double_tap_action ?? { action: 'none' },
     };
     this.requestUpdate();
   }

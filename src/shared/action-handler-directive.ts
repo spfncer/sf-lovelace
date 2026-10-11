@@ -159,6 +159,12 @@ const setupActionHandlerMethods = (element: HTMLElement): ActionHandler => {
         return;
       }
 
+      // Suppress the synthetic mouse/click the browser emits after a touch so
+      // the action isn't dispatched twice (matches HA's own action handler).
+      if (ev.cancelable) {
+        ev.preventDefault();
+      }
+
       if (['touchend', 'touchcancel', 'mouseup'].includes(ev.type)) {
         actionHandler.stopAnimation();
       }

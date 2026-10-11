@@ -77,8 +77,9 @@ fixed card size.
 - iOS-style battery glyph in the header (green + bolt while charging, red when low)
 - Disconnected indicator when the feeder is offline
 - Empty state while no visitor has been collected yet
-- Tap the card to open the native details dialog for the recent visitor **or** its
-  image (configurable) — for the default Recent Visitor sensor, enable it first
+- Configurable tap / hold / double-tap actions (any Home Assistant card action), with
+  the built-in default of opening the native details dialog for the recent visitor
+  **or** its image — for the default Recent Visitor sensor, enable it first
 - Sections-layout resizing
 
 ### Configuration
@@ -96,17 +97,23 @@ overrides:
 type: custom:sf-birdbuddy-card
 entity: sensor.backyard_buddy_feeder_state
 name: Backyard Buddy
-tap_entity: recent_visitor   # or image — opens that entity's native more-info dialog
+tap_entity: recent_visitor      # entity used by entity-based actions
+tap_action: { action: more-info }
+hold_action: { action: none }
+double_tap_action: { action: none }
 battery_entity: sensor.backyard_buddy_battery
 charging_entity: binary_sensor.backyard_buddy_charging
 recent_visitor_entity: sensor.backyard_buddy_recent_visitor
 image_entity: image.backyard_buddy_recent_visitor_image
 ```
 
-> **Tap target:** `tap_entity` chooses which entity's native details dialog opens when
-> the card is tapped (`recent_visitor`, the default, or `image`). If the chosen entity
-> isn't available, the card falls back to the other one; if neither exists the card
-> isn't tappable.
+> **Actions:** `tap_action`, `hold_action` and `double_tap_action` accept any Home
+> Assistant [card action](https://www.home-assistant.io/dashboards/actions/)
+> (more-info, toggle, navigate, URL, perform action, Assist, …). They default to
+> `more-info` on tap and `none` for hold / double tap. `tap_entity` selects which
+> auto-discovered entity (`recent_visitor` or `image`) entity-based actions target
+> when the action doesn't name one; it falls back to the other entity when the chosen
+> one is unavailable.
 
 > **Species names:** the integration's **Recent Visitor** sensor is **disabled by
 > default**. Enable it in Settings → Devices & Services → Entities to show the species

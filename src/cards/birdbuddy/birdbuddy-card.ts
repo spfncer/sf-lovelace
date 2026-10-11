@@ -4,6 +4,8 @@ import { HassEntity } from 'home-assistant-js-websocket';
 import { fireEvent, HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
 
 import type {
+  BirdbuddyActionConfig,
+  BirdbuddyActionParams,
   BirdbuddyDeviceEntry,
   BirdbuddyRegistryEntry,
   LovelaceGridOptions,
@@ -30,6 +32,13 @@ interface WindowWithCustomCards extends Window {
 const LOW_BATTERY_PERCENT = 20;
 /** The anchor Feeder State sensor's object-id suffix. */
 const FEEDER_STATE_SUFFIX = '_feeder_state';
+
+/**
+ * Whether a configured action does anything. Same semantics as
+ * custom-card-helpers' `hasAction`, reimplemented because that helper types
+ * actions as the narrower `ActionConfig` union (no `assist`/`perform-action`).
+ */
+const isActionEnabled = (config?: BirdbuddyActionConfig): boolean => !!config && config.action !== 'none';
 
 /** Auto-discovered sibling entities on the same device. */
 interface DiscoveredEntities {
@@ -69,7 +78,13 @@ export class SfBirdbuddyCard extends LitElement {
       throw new Error(localize('common.invalid_configuration'));
     }
 
-    this.config = { ...config };
+    this.config = {
+      ...config,
+      // Seed the effective defaults so runtime and editor agree out of the box.
+      tap_action: config.tap_action ?? { action: 'more-info' },
+      hold_action: config.hold_action ?? { action: 'none' },
+      double_tap_action: config.double_tap_action ?? { action: 'none' },
+    };
     this._discovery = undefined;
   }
 
@@ -253,12 +268,13 @@ export class SfBirdbuddyCard extends LitElement {
   }
 
   /**
-   * Entity whose native more-info dialog should open on tap.
+   * Default entity for entity-based actions (`more-info`, `toggle`).
    *
    * Uses the configured `tap_entity`, preferring `recent_visitor`, and falls
    * back to the other discovered entity when the chosen one is missing (the
-   * Recent Visitor sensor is disabled by default). Returns undefined only when
-   * neither entity is available, which disables the card's tap affordance.
+   * Recent Visitor sensor is disabled by default). Returns undefined when
+   * neither entity is available (entity-based actions then fall back to HA's
+   * own "no entity" handling).
    */
   private _tapEntityId(): string | undefined {
     const { recentVisitor, image } = this._discover();
@@ -273,17 +289,29 @@ export class SfBirdbuddyCard extends LitElement {
     return undefined;
   }
 
+  /** True when at least one configured action does something. */
+  private _isInteractive(): boolean {
+    const { tap_action, hold_action, double_tap_action } = this.config;
+    return isActionEnabled(tap_action) || isActionEnabled(hold_action) || isActionEnabled(double_tap_action);
+  }
+
+  private _actionParams(): BirdbuddyActionParams {
+    return {
+      entity: this._tapEntityId(),
+      tap_action: this.config.tap_action,
+      hold_action: this.config.hold_action,
+      double_tap_action: this.config.double_tap_action,
+    };
+  }
+
   private _handleAction = (ev: CustomEvent<{ action?: string }>): void => {
-    if (ev.detail?.action !== 'tap') {
+    const action = ev.detail?.action;
+    if (action !== 'tap' && action !== 'hold' && action !== 'double_tap') {
       return;
     }
-    const entityId = this._tapEntityId();
-    if (!entityId) {
-      return;
-    }
-    // Canonical way for a custom card to open Home Assistant's native
-    // more-info dialog: a bubbling, composed `hass-more-info` event.
-    fireEvent(this, 'hass-more-info', { entityId });
+    // Delegate to Home Assistant's own action handler so every action type
+    // (including `assist`), confirmation dialogs and haptics behave natively.
+    fireEvent(this, 'hass-action', { config: this._actionParams(), action });
   };
 
   /**
@@ -344,20 +372,21 @@ export class SfBirdbuddyCard extends LitElement {
     const photoUrl = this._photoUrl();
     const deviceName = this._deviceName(stateObj);
 
-    // The card is tappable only when a more-info target is actually available.
-    const tapEntityId = this._tapEntityId();
-    const tapStateObj = tapEntityId ? this.hass.states[tapEntityId] : undefined;
-    const tapLabel =
-      (tapStateObj?.attributes.friendly_name as string | undefined) ?? localize('birdbuddy.open_details');
+    // The card is interactive only when at least one action does something.
+    const interactive = this._isInteractive();
 
     return html`
       <ha-card
-        class=${tapEntityId ? 'interactive' : ''}
-        role=${tapEntityId ? 'button' : nothing}
-        tabindex=${tapEntityId ? '0' : nothing}
-        aria-label=${tapEntityId ? tapLabel : nothing}
+        class=${interactive ? 'interactive' : ''}
+        role=${interactive ? 'button' : nothing}
+        tabindex=${interactive ? '0' : nothing}
+        aria-label=${interactive ? deviceName : nothing}
         @action=${this._handleAction}
-        ${actionHandler({ disabled: !tapEntityId })}
+        ${actionHandler({
+          disabled: !interactive,
+          hasHold: isActionEnabled(this.config.hold_action),
+          hasDoubleClick: isActionEnabled(this.config.double_tap_action),
+        })}
       >
         <div class="header">
           <span class="devname" title=${deviceName}>${deviceName}</span>

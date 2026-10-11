@@ -6,15 +6,67 @@ declare global {
     'sf-birdbuddy-card-editor': LovelaceCardEditor;
     'hui-error-card': LovelaceCard;
   }
+
+  interface HASSDomEvents {
+    // Delegates a card action to Home Assistant's own handler (the `action-mixin`
+    // on the root element listens for this). Supported since HA 2023.7.
+    'hass-action': { config: BirdbuddyActionParams; action: string };
+  }
 }
 
 /**
- * Entity whose native more-info dialog opens when the card is tapped.
+ * Default entity used by entity-based card actions (`more-info`, `toggle`).
  *
  * `recent_visitor` targets the Recent Visitor sensor (species + timestamp);
  * `image` targets the Recent Visitor image entity.
  */
 export type BirdbuddyTapEntity = 'recent_visitor' | 'image';
+
+/**
+ * Home Assistant card action config.
+ *
+ * Mirrors the frontend `ActionConfig` closely enough to author and forward it.
+ * The card never interprets it beyond handing it back to Home Assistant via the
+ * `hass-action` event, so every action the frontend supports (including
+ * `assist` and `perform-action`) works.
+ */
+export interface BirdbuddyActionConfig {
+  action: string;
+  entity?: string;
+  navigation_path?: string;
+  navigation_replace?: boolean;
+  url_path?: string;
+  service?: string;
+  perform_action?: string;
+  service_data?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  target?: Record<string, unknown>;
+  pipeline_id?: string;
+  start_listening?: boolean;
+  confirmation?: BirdbuddyActionConfirmation;
+}
+
+/** Confirmation dialog options for a card action. */
+export interface BirdbuddyActionConfirmation {
+  text?: string;
+  title?: string;
+  confirm_text?: string;
+  dismiss_text?: string;
+  exemptions?: Array<{ user: string }>;
+}
+
+/**
+ * Config handed to the `hass-action` event. `entity` is the default target for
+ * `more-info` / `toggle`; individual actions may override it.
+ */
+export interface BirdbuddyActionParams {
+  entity?: string;
+  camera_image?: string;
+  image_entity?: string;
+  tap_action?: BirdbuddyActionConfig;
+  hold_action?: BirdbuddyActionConfig;
+  double_tap_action?: BirdbuddyActionConfig;
+}
 
 /**
  * Card configuration.
@@ -31,11 +83,16 @@ export interface SfBirdbuddyCardConfig extends LovelaceCardConfig {
   /** Header label override (defaults to the device registry name). */
   name?: string;
   /**
-   * Which entity's native more-info dialog opens when the card is tapped.
-   * Defaults to `recent_visitor`, falling back to the other entity when the
-   * chosen one isn't available.
+   * Default entity for entity-based actions (`more-info`, `toggle`). Defaults
+   * to `recent_visitor`, falling back to the other entity when unavailable.
    */
   tap_entity?: BirdbuddyTapEntity;
+  /** Action on tap. Defaults to `more-info` on `tap_entity`. */
+  tap_action?: BirdbuddyActionConfig;
+  /** Action on hold. Defaults to `none`. */
+  hold_action?: BirdbuddyActionConfig;
+  /** Action on double tap. Defaults to `none`. */
+  double_tap_action?: BirdbuddyActionConfig;
   /** Override for the `sensor.*_battery` entity. */
   battery_entity?: string;
   /** Override for the `binary_sensor.*_charging` entity. */
