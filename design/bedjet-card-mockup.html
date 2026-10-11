@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sf-bedjet-card — design mockup</title>
+<style>
+  :root {
+    --bg: #111111;
+    --card: #1c1c1c;
+    --text: #e1e1e1;
+    --muted: #9b9b9b;
+    --faint: #616161;
+    --divider: #2b2b2b;
+    --accent: #4db5ff;
+    --heat: #ff7043;
+    --cool: #4fc3f7;
+    --dry: #26a69a;
+    --turbo: #ffc933;
+    --program: #b39ddb;
+    --track: #33393f;
+    --btn: #232323;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 16px 64px; gap: 14px;
+  }
+
+  /* ── preview controls (not part of the card) ─────────────── */
+  .previewbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
+  .seg { display: flex; background: #1a1a1a; border: 1px solid var(--divider); border-radius: 10px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 7px 13px; cursor: pointer; font-size: 12.5px; font-weight: 500;
+  }
+  .seg button.on { background: rgba(77,181,255,.16); color: #fff; }
+  .seglabel { font-size: 11.5px; color: var(--faint); margin-right: -4px; }
+  .hint { font-size: 12px; color: var(--faint); }
+  .foot { font-size: 12px; color: var(--faint); max-width: 420px; text-align: center; line-height: 1.5; }
+
+  /* ── the card ────────────────────────────────────────────── */
+  .card {
+    width: 400px; max-width: 100%; background: var(--card);
+    border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.45);
+    overflow: hidden;
+  }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 18px 10px; }
+  .devname { font-size: 15px; font-weight: 600; }
+  .status { display: flex; align-items: center; gap: 7px; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+
+  .readout { text-align: center; padding: 4px 0 10px; transition: opacity .2s; }
+  .card.is-off .readout { opacity: .45; }
+  .big { font-size: 46px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .big .deg { font-size: 26px; color: var(--muted); margin-left: 2px; }
+  .sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  .modes { display: flex; gap: 10px; justify-content: center; padding: 4px 0 12px; }
+  .mode {
+    width: 52px; height: 46px; border-radius: 12px; border: 1px solid var(--divider);
+    background: var(--btn); color: var(--muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: .15s;
+  }
+  .mode:hover { background: #2a2a2a; color: var(--text); }
+  .mode svg { width: 20px; height: 20px; }
+  .mode.active.heat  { color: var(--heat);   border-color: var(--heat);   background: rgba(255,112,67,.12); }
+  .mode.active.cool  { color: var(--cool);   border-color: var(--cool);   background: rgba(79,195,247,.12); }
+  .mode.active.dry   { color: var(--dry);    border-color: var(--dry);    background: rgba(38,166,154,.12); }
+
+  .row { border-top: 1px solid var(--divider); padding: 12px 18px 14px; }
+  .rowhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .rowhead .label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .rowhead .val { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .rowhead .val.accent { color: var(--accent); }
+  .rowhead .val.end { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .rowhead .val.end svg { width: 12px; height: 12px; }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
+  input[type=range]:disabled { opacity: .35; cursor: not-allowed; }
+  input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--track); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; margin-top: -6px; box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  }
+  input[type=range]::-moz-range-track { height: 8px; border-radius: 4px; background: var(--track); }
+  input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  #tempSlider::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--cool), var(--heat)); }
+  #tempSlider::-moz-range-track { background: linear-gradient(90deg, var(--cool), var(--heat)); }
+  #fanSlider::-webkit-slider-runnable-track { background: linear-gradient(90deg, #33505f, var(--accent)); }
+  #fanSlider::-moz-range-track { background: linear-gradient(90deg, #33505f, var(--accent)); }
+  .scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); margin-top: -2px; }
+
+  .progline { display: flex; gap: 8px; align-items: center; }
+  .selwrap { position: relative; flex: 1; }
+  select {
+    appearance: none; -webkit-appearance: none; width: 100%;
+    background: var(--btn); border: 1px solid var(--divider); color: var(--text);
+    padding: 9px 34px 9px 12px; border-radius: 10px; font-size: 14px; cursor: pointer;
+  }
+  .selwrap::after {
+    content: ""; position: absolute; right: 13px; top: 50%; translate: 0 -35%;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid var(--muted); pointer-events: none;
+  }
+  .stopbtn {
+    display: flex; align-items: center; gap: 6px; border: 1px solid var(--divider);
+    background: var(--btn); color: var(--muted); padding: 8px 12px;
+    border-radius: 10px; font-size: 12.5px; cursor: pointer;
+  }
+  .stopbtn:hover { color: var(--text); }
+  .stopbtn svg { width: 12px; height: 12px; }
+  .progstep { font-size: 12px; color: var(--program); }
+
+  .rt { display: flex; flex-direction: column; gap: 9px; }
+  .rt.dimmed { opacity: .45; pointer-events: none; }
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .stepper button {
+    width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--divider);
+    background: var(--btn); color: var(--text); font-size: 16px; cursor: pointer;
+  }
+  .stepper button:hover { background: #2a2a2a; }
+  #rtVal { min-width: 64px; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--divider); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer; transition: .15s;
+  }
+  .chip:hover { color: var(--text); }
+  .chip.sel { color: var(--accent); border-color: var(--accent); background: rgba(77,181,255,.1); }
+  .chip:disabled { opacity: .3; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+  <div class="previewbar">
+    <span class="seglabel">preview state</span>
+    <div class="seg" id="stateSeg">
+      <button data-state="off">Off</button>
+      <button data-state="heat">Heat</button>
+      <button data-state="cool">Cool</button>
+      <button data-state="dry">Dry</button>
+      <button data-state="turbo">Turbo</button>
+      <button data-state="extended">Ext heat</button>
+      <button data-state="program">Program</button>
+    </div>
+    <div class="seg" id="verSeg">
+      <button data-v3="false">V2</button>
+      <button data-v3="true" class="on">V3</button>
+    </div>
+  </div>
+  <div class="hint">Mockup with fake data — click around, every control is live.</div>
+
+  <div class="card" id="card">
+    <div class="header">
+      <div>
+        <div class="devname" id="devName">Master BedJet</div>
+        <div class="status"><span class="dot" id="dot"></span><span id="status">—</span></div>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="big"><span id="bigTemp">35</span><span class="deg">°</span></div>
+      <div class="sub" id="subRead"></div>
+    </div>
+
+    <div class="modes">
+      <button class="mode heat" data-mode="heat" title="Heat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+      </button>
+      <button class="mode cool" data-mode="cool" title="Cool">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20"/><path d="M12 2v20"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/></svg>
+      </button>
+      <button class="mode dry" data-mode="dry" title="Dry">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+      </button>
+      <button class="mode off" data-mode="off" title="Off / standby">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+      </button>
+    </div>
+
+    <div class="row">
+      <div class="rowhead"><span class="label">Target temp</span><span class="val" id="tempVal">35°C</span></div>
+      <input type="range" id="tempSlider" min="19" max="43" step="0.5" value="35">
+      <div class="scale"><span>19°</span><span>43°</span></div>
+    </div>
+
+    <div class="row">
+      <div class="rowhead"><span class="label">Fan</span><span class="val" id="fanVal">75%</span></div>
+      <input type="range" id="fanSlider" min="5" max="100" step="5" value="75">
+      <div class="scale"><span>5%</span><span>100%</span></div>
+    </div>
+
+    <div class="row" id="programRow">
+      <div class="rowhead">
+        <span class="label">Program</span>
+        <span class="progstep" id="progStep"></span>
+      </div>
+      <div class="progline">
+        <div class="selwrap">
+          <select id="progSelect">
+            <option value="">None</option>
+            <option value="Turbo">Turbo</option>
+            <option value="Extended Heat">Extended Heat</option>
+            <option value="SleepCloud">SleepCloud</option>
+            <option value="Deep Sleep">Deep Sleep</option>
+            <option value="Overnight Warm">Overnight Warm</option>
+          </select>
+        </div>
+        <button class="stopbtn" id="stopBtn" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          Stop
+        </button>
+      </div>
+    </div>
+
+    <div class="row" id="runtimeRow">
+      <div class="rowhead">
+        <span class="label">Time remaining</span>
+        <span class="val end">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span id="endsAt">ends —</span>
+        </span>
+      </div>
+      <div class="rt" id="rtControls">
+        <div class="stepper">
+          <button id="rtMinus" title="−15 min">−</button>
+          <span id="rtVal">1h 30m</span>
+          <button id="rtPlus" title="+15 min">+</button>
+        </div>
+        <div class="chips" id="chips">
+          <button class="chip" data-min="30">30m</button>
+          <button class="chip" data-min="60">1h</button>
+          <button class="chip" data-min="120">2h</button>
+          <button class="chip" data-min="240">4h</button>
+          <button class="chip" data-min="600">10h</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Mockup only (fake data). The real card reads/writes
+    <b>climate.&lt;device&gt;</b> (mode / temp / fan / presets),
+    <b>number.&lt;device&gt;_runtime_remaining</b>,
+    <b>sensor.&lt;device&gt;_ambient_temperature</b>, <b>sensor.&lt;device&gt;_run_end_time</b>.<br>
+    Program select mirrors HA's native preset menu: None · Turbo · Extended Heat · biorhythm
+    programs. Switching to V2 previews feature detection: Dry and Time remaining disappear
+    and the select keeps only None · Turbo.
+  </div>
+
+<script>
+  // ── fake device state ─────────────────────────────────────
+  const STEPS = [ // biorhythm steps: [target temp, fan %, air temp]
+    [30, 45, 27.5], [27, 30, 25.0], [24, 20, 23.4], [22, 15, 22.2],
+  ];
+  const PRESETS = {
+    off:     { temp: 35,   fan: 75,  air: 22.1, remaining: 0   },
+    heat:    { temp: 35,   fan: 75,  air: 28.5, remaining: 90  },
+    cool:    { temp: 22,   fan: 50,  air: 21.0, remaining: 120 },
+    dry:     { temp: 22,   fan: 100, air: 22.8, remaining: 45  },
+    turbo:   { temp: 43,   fan: 100, air: 38.5, remaining: 10  },
+    extended:{ temp: 35,   fan: 40,  air: 30.0, remaining: 600 },
+  };
+  const STATUS = {
+    heat: "Heating", cool: "Cooling", dry: "Drying",
+    turbo: "Turbo boost", extended: "Extended heat", program: null, off: "Off",
+  };
+  const DOT = {
+    heat: "#ff7043", cool: "#4fc3f7", dry: "#26a69a",
+    turbo: "#ffc933", extended: "#ff9e40", program: "#b39ddb", off: "#616161",
+  };
+
+  const S = {
+    state: "heat", v3: true,
+    temp: 35, fan: 75, room: 22.4, air: 28.5,
+    remaining: 90, program: "SleepCloud", step: 1,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    card: $("card"), status: $("status"), dot: $("dot"),
+    bigTemp: $("bigTemp"), subRead: $("subRead"),
+    tempSlider: $("tempSlider"), tempVal: $("tempVal"),
+    fanSlider: $("fanSlider"), fanVal: $("fanVal"),
+    progSelect: $("progSelect"), progStep: $("progStep"),
+    stopBtn: $("stopBtn"), programRow: $("programRow"), runtimeRow: $("runtimeRow"),
+    rtControls: $("rtControls"), rtVal: $("rtVal"), endsAt: $("endsAt"),
+    chips: $("chips"),
+  };
+
+  const fmtTemp = (t) => (t % 1 ? t.toFixed(1) : Math.round(t));
+  const fmtRt = (m) => {
+    m = Math.max(0, Math.round(m));
+    const h = Math.floor(m / 60), mm = m % 60;
+    return h ? (mm ? `${h}h ${mm}m` : `${h}h`) : `${mm}m`;
+  };
+  const endsAt = () => {
+    if (S.remaining <= 0 || S.state === "off") return "ends —";
+    const d = new Date(Date.now() + S.remaining * 60000);
+    return "ends " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  };
+
+  function applyState(state, keep) {
+    if (!S.v3 && (state === "dry" || state === "program" || state === "extended")) state = "heat";
+    S.state = state;
+    if (state === "program") {
+      const step = Math.min(S.step, STEPS.length);
+      [S.temp, S.fan, S.air] = STEPS[step - 1];
+      S.remaining = 480;
+    } else {
+      const p = PRESETS[state];
+      S.temp = keep ? S.temp : p.temp;
+      S.fan = keep ? S.fan : p.fan;
+      S.air = p.air;
+      S.remaining = p.remaining;
+    }
+    render();
+  }
+
+  function render() {
+    const st = S.state;
+
+    // header
+    els.status.textContent = st === "program"
+      ? `${S.program} · step ${S.step} · ${endsAt()}`
+      : st === "off" ? "Off" : `${STATUS[st]} · ${endsAt()}`;
+    els.dot.style.background = DOT[st];
+    els.card.classList.toggle("is-off", st === "off");
+
+    // readouts
+    els.bigTemp.textContent = fmtTemp(S.temp);
+    els.subRead.textContent = st === "off"
+      ? `room ${S.room}° · air ${fmtTemp(S.air)}°`
+      : `room ${S.room}° · air ${fmtTemp(S.air)}° · fan ${S.fan}%`;
+
+    // mode buttons — Heat icon also lights for Turbo / Extended Heat
+    // (both report hvac_mode "heat" in the real integration)
+    document.querySelectorAll(".mode").forEach((b) => {
+      const mode = b.dataset.mode;
+      const active = mode === st || (mode === "heat" && (st === "turbo" || st === "extended"));
+      b.classList.toggle("active", active);
+    });
+
+    // sliders
+    const slidersLocked = ["off", "turbo", "program"].includes(st);
+    els.tempSlider.disabled = slidersLocked;
+    els.fanSlider.disabled = slidersLocked;
+    els.tempSlider.value = S.temp;
+    els.fanSlider.value = S.fan;
+    els.tempVal.textContent = `${fmtTemp(S.temp)}°C`;
+    els.fanVal.textContent = `${S.fan}%`;
+
+    // program select — mirrors HA's native preset menu
+    els.progSelect.value =
+      st === "program" ? S.program :
+      st === "turbo" ? "Turbo" :
+      st === "extended" ? "Extended Heat" : "";
+    [...els.progSelect.options].forEach((o) => {
+      const v = o.value;
+      // V2 only exposes the None + Turbo presets
+      o.hidden = !S.v3 && v !== "" && v !== "Turbo";
+    });
+    els.stopBtn.style.display = st === "program" ? "" : "none";
+    els.progStep.textContent = st === "program" ? `running · step ${S.step}` : "";
+
+    // runtime row
+    els.runtimeRow.style.display = S.v3 ? "" : "none";
+    const rtEditable = ["heat", "cool", "dry", "extended"].includes(st);
+    els.rtControls.classList.toggle("dimmed", !rtEditable);
+    els.rtVal.textContent = fmtRt(S.remaining);
+    els.endsAt.textContent = endsAt();
+    document.querySelectorAll(".chip").forEach((c) => {
+      c.classList.toggle("sel", rtEditable && Math.round(S.remaining) === +c.dataset.min);
+    });
+
+    // dry button hidden on V2
+    document.querySelector(".mode.dry").style.display = S.v3 ? "" : "none";
+
+    // preview bar sync
+    document.querySelectorAll("#stateSeg button").forEach((b) =>
+      b.classList.toggle("on", b.dataset.state === st));
+    document.querySelectorAll("#verSeg button").forEach((b) =>
+      b.classList.toggle("on", (b.dataset.v3 === "true") === S.v3));
+  }
+
+  // ── wiring ────────────────────────────────────────────────
+  document.querySelectorAll("#stateSeg button").forEach((b) =>
+    b.addEventListener("click", () => {
+      S.step = 1;
+      applyState(b.dataset.state);
+    }));
+  document.querySelectorAll("#verSeg button").forEach((b) =>
+    b.addEventListener("click", () => { S.v3 = b.dataset.v3 === "true"; applyState(S.state); }));
+
+  document.querySelectorAll(".mode").forEach((b) =>
+    b.addEventListener("click", () => applyState(b.dataset.mode)));
+
+  els.progSelect.addEventListener("change", () => {
+    const v = els.progSelect.value;
+    if (v === "") { applyState("heat"); return; }        // None preset → plain Heat
+    if (v === "Turbo") { applyState("turbo"); return; }
+    if (v === "Extended Heat") { applyState("extended"); return; }
+    S.program = v; S.step = 1;
+    applyState("program");
+  });
+  els.stopBtn.addEventListener("click", () => applyState("off"));
+
+  $("rtMinus").addEventListener("click", () => { S.remaining = Math.max(0, S.remaining - 15); render(); });
+  $("rtPlus").addEventListener("click", () => { S.remaining = Math.min(600, S.remaining + 15); render(); });
+  document.querySelectorAll(".chip").forEach((c) =>
+    c.addEventListener("click", () => { S.remaining = +c.dataset.min; render(); }));
+
+  els.tempSlider.addEventListener("input", () => { S.temp = +els.tempSlider.value; render(); });
+  els.fanSlider.addEventListener("input", () => { S.fan = +els.fanSlider.value; render(); });
+
+  // ── ambient simulation: program steps advance, runtime counts down ──
+  setInterval(() => {
+    if (S.state === "program") {
+      S.step = (S.step % STEPS.length) + 1;
+      [S.temp, S.fan, S.air] = STEPS[S.step - 1];
+    }
+    if (S.state !== "off" && S.state !== "program") {
+      S.remaining = Math.max(0, S.remaining - 3.5 / 60);
+      if (S.remaining <= 0) applyState("off");
+    }
+    if (S.state === "program") S.remaining = Math.max(0, S.remaining - 3.5 / 60);
+    render();
+  }, 3500);
+
+  applyState("heat");
+</script>
+</body>
+</html>
