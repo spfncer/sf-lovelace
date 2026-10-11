@@ -28,6 +28,29 @@ export interface SfBedjetCardConfig extends LovelaceCardConfig {
   end_time_entity?: string;
   /** Override for the `sensor.*_bio_sequence_step` entity. */
   step_entity?: string;
+  /**
+   * Custom size chosen in the dashboard editor's Layout tab. Managed by the
+   * Lovelace sections layout — the card itself never reads it.
+   */
+  grid_options?: LovelaceGridOptions;
+}
+
+/**
+ * Sections-layout sizing hints returned from the card's `getGridOptions()`
+ * (Lovelace card API; not yet exported by custom-card-helpers v2).
+ *
+ * Sizes are in section-grid units: a section is 12 columns wide and one row
+ * is 56px + 8px gap. `columns: 'full'` spans the whole section and
+ * `rows: 'auto'` sizes the card to its content; the `min_*`/`max_*` bounds
+ * constrain what the drag-resize UI (and YAML `grid_options`) may pick.
+ */
+export interface LovelaceGridOptions {
+  columns?: number | 'full';
+  rows?: number | 'auto';
+  min_columns?: number;
+  max_columns?: number;
+  min_rows?: number;
+  max_rows?: number;
 }
 
 /**

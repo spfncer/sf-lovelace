@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HassEntity } from 'home-assistant-js-websocket';
 import { HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
 
-import type { BedjetRegistryEntry, SfBedjetCardConfig } from './bedjet-card-types';
+import type { BedjetRegistryEntry, LovelaceGridOptions, SfBedjetCardConfig } from './bedjet-card-types';
 import { localize } from '../../shared/localize/localize';
 
 // Registering with window.customCards makes the card appear in the Lovelace
@@ -105,6 +105,26 @@ export class SfBedjetCard extends LitElement {
 
   public getCardSize(): number {
     return 10;
+  }
+
+  /**
+   * Sections-layout resize support.
+   *
+   * Returning non-empty options tells the dashboard this card can be
+   * drag-resized and removes the editor's "does not fully support resizing"
+   * notice. Defaults keep the card as it renders today (full section width,
+   * content-driven height); users can resize between half and full width and
+   * 6–12 rows, or flip the switches for auto height / full width.
+   */
+  public getGridOptions(): LovelaceGridOptions {
+    return {
+      columns: 12,
+      rows: 'auto',
+      min_columns: 6,
+      max_columns: 12,
+      min_rows: 6,
+      max_rows: 12,
+    };
   }
 
   // Watch every entity the card renders, not just the climate entity.
@@ -883,10 +903,27 @@ export class SfBedjetCard extends LitElement {
     return css`
       :host {
         display: block;
+        /* Sections layout: fill the grid cell the dashboard allocates. In
+           auto-height contexts (masonry, stacks, editor preview) the
+           percentage resolves against an auto-height parent and collapses
+           back to content height. */
+        height: 100%;
       }
 
+      /* Flex column so the card scales inside custom-sized grid cells:
+         extra height grows the readout, and cells smaller than the content
+         clip the bottom rows instead of squashing them. */
       ha-card {
         overflow: hidden;
+        height: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        /* Width container for the responsive rules below. */
+        container-type: inline-size;
+      }
+      ha-card > * {
+        flex-shrink: 0;
       }
 
       .header {
@@ -905,14 +942,17 @@ export class SfBedjetCard extends LitElement {
         justify-content: center;
         gap: 36px;
         padding: 10px 0 16px;
+        /* Absorb extra height in oversized grid cells. */
+        flex-grow: 1;
         transition: opacity 0.2s ease-in-out;
       }
       .readout.is-off {
         opacity: 0.5;
       }
       .ro-col {
+        flex: 1;
+        min-width: 0;
         text-align: center;
-        min-width: 110px;
       }
       .ro-value {
         display: flex;
@@ -948,6 +988,11 @@ export class SfBedjetCard extends LitElement {
       /* ── Mode buttons (ha-control-select) ─────────────────────── */
       ha-control-select.modes {
         margin: 0 18px 8px;
+        /* The component defaults its host to width:100%, which ignores
+           these margins and pushes the button row 18px past the card's
+           right edge, where overflow:hidden clips it. "auto" lets the
+           row fill the space left by the margins instead. */
+        width: auto;
         --mdc-icon-size: 22px;
       }
 
@@ -1052,12 +1097,32 @@ export class SfBedjetCard extends LitElement {
         animation: command-pulse 1s ease-in-out infinite;
       }
 
-      @media (max-width: 600px) {
+      /* ── Width scaling (sections resize / narrow columns) ─────────
+         Keyed on the card's own width (ha-card container) so the readout
+         scales with the resized cell, not the browser viewport. */
+      @container (max-width: 260px) {
         .readout {
-          gap: 20px;
+          gap: 16px;
         }
         .ro-num {
-          font-size: 38px;
+          font-size: 36px;
+        }
+        .ro-unit {
+          font-size: 19px;
+        }
+      }
+      @container (max-width: 200px) {
+        .readout {
+          gap: 10px;
+        }
+        .ro-num {
+          font-size: 26px;
+        }
+        .ro-unit {
+          font-size: 14px;
+        }
+        .ro-divider {
+          display: none;
         }
       }
     `;

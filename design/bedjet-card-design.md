@@ -177,6 +177,13 @@ entity: climate.master_bedjet   # everything else auto-discovered via device reg
 9. **Temperature units** — follow HA: display and send in the climate entity's
    `temperature_unit` attribute (which HA converts to the instance's configured unit).
    No unit option on the card, no conversion code.
+10. **Grid sizing** (2026-10-10) — the card implements Lovelace `getGridOptions()`
+   so Sections dashboards can resize it without the "does not fully support resizing"
+   notice: full section width by default, content-driven ("auto") height, resizable
+   from half to full width and 6–12 grid rows. The card fills its allocated cell —
+   extra height grows the Setting | Actual readout, cells smaller than the content
+   clip the bottom rows instead of squashing them, and card-width container queries
+   scale the readout for narrow cells. `getCardSize()` stays as the masonry fallback.
 
 ## 9. Implementation outline
 

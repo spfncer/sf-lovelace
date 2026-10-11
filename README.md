@@ -24,6 +24,8 @@ add one resource and every card in the collection becomes available.
 - Program select: Turbo, Extended Heat, and biorhythm programs
 - Time remaining with stepper + quick-set chips, paired with run-end time
 - Automatic V2/V3 feature detection (Dry, runtime, program availability)
+- Sections-layout resizing: drag-resize from half to full section width and
+  6–12 rows, auto height by default
 
 ### Configuration
 
@@ -48,6 +50,16 @@ step_entity: sensor.master_bedjet_bio_sequence_step
 > is **disabled by default**. Enable it in Settings → Devices & Services →
 > Entities for exact `running · step N` tracking. Without it the card falls back
 > to a heuristic (fan running while the climate entity reports `off`).
+
+### Sizing
+
+On Sections dashboards the card supports resizing (drag the section handles or
+use the card editor's **Layout** tab). It defaults to full section width with
+auto height, and can be resized from half to full width and 6–12 grid rows. The
+card fills its allocated cell: extra height grows the Setting | Actual readout,
+cells smaller than the content clip the bottom rows, and narrow widths scale the
+readout numbers down automatically. Masonry dashboards keep using the classic
+fixed card size.
 
 ---
 
