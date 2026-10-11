@@ -1,38 +1,19 @@
-import { LitElement, html, TemplateResult, css, PropertyValues, CSSResultGroup } from 'lit';
+import { LitElement, html, nothing, TemplateResult, css, PropertyValues, CSSResultGroup } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HassEntity } from 'home-assistant-js-websocket';
-import {
-  HomeAssistant, // The main hass object — passed down from HA on every state change
-  hasConfigOrEntityChanged, // Utility: returns true only when config or the tracked entity changed
-  hasAction, // Utility: returns true when an ActionConfig is not 'none'
-  ActionHandlerEvent, // Event type fired by the action-handler directive
-  handleAction, // Utility: routes an action (toggle, more-info, navigate…) to the right HA call
-  LovelaceCardEditor, // Interface your editor element must implement
-  computeIcon, // Derives the MDI icon for an entity (falls back to domain default)
-  computeName, // Derives the friendly_name for an entity
-  computeState, // Returns the human-readable state string (respects unit_of_measurement)
-  formatTimestamp, // Converts an ISO timestamp to a human-friendly relative string
-} from 'custom-card-helpers'; // Community-maintained helpers: https://github.com/custom-cards/custom-card-helpers
+import { HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
 
-// TODO: Replace this import with your own config type once you've defined your fields in types.ts.
-import type { SfBedjetCardConfig } from './types';
-
-// Local action-handler directive — provides tap / hold / double-tap gesture support.
-import { actionHandler } from './action-handler-directive';
-import { CARD_VERSION } from './const';
+import type { BedjetRegistryEntry, SfBedjetCardConfig } from './types';
 import { localize } from './localize/localize';
 
-// Styled console banner so your card is easy to spot in the browser console.
-// Stays visible in production — useful for version-mismatch debugging in HA.
 console.info(
-  `%c  SF-BEDJET-CARD \n%c  ${localize('common.version')} ${CARD_VERSION}    `,
+  `%c  SF-BEDJET-CARD \n%c  ${localize('common.version')} 0.1.0    `,
   'color: orange; font-weight: bold; background: black',
   'color: white; font-weight: bold; background: dimgray',
 );
 
-// Registering with window.customCards makes your card appear in the Lovelace
-// "Add Card" UI picker with a name and description. This array is shared by all
-// custom cards on the page, so we guard with `|| []` before pushing.
+// Registering with window.customCards makes the card appear in the Lovelace
+// "Add Card" picker. The array is shared by every custom card on the page.
 interface WindowWithCustomCards extends Window {
   customCards: Array<{ type: string; name: string; description: string }>;
 }
@@ -40,967 +21,1037 @@ interface WindowWithCustomCards extends Window {
 (window as unknown as WindowWithCustomCards).customCards =
   (window as unknown as WindowWithCustomCards).customCards || [];
 (window as unknown as WindowWithCustomCards).customCards.push({
-  // TODO: Change 'sf-bedjet-card' to match your @customElement decorator name.
   type: 'sf-bedjet-card',
-  // TODO: Give your card a user-facing name and description.
   name: 'SF BedJet Card',
-  description: 'A template custom card for you to create something awesome',
+  description: 'Compact BedJet V2/V3 control card',
 });
 
-// TODO: Rename 'sf-bedjet-card' to your card's unique tag name.
-// Convention: all lowercase, hyphen-separated, and prefixed to avoid clashes
-// e.g. 'my-weather-card'. Must match the `type:` in your YAML config and the
-// window.customCards entry above.
+type Mode = 'heat' | 'cool' | 'dry' | 'off';
+
+/** MDI icons mirroring the physical BedJet remote. */
+const MODE_ICONS: Record<Mode, string> = {
+  heat: 'mdi:fire',
+  cool: 'mdi:snowflake',
+  dry: 'mdi:water',
+  off: 'mdi:power',
+};
+
+/** Quick-set chips (minutes) for the time-remaining row. */
+const QUICK_SET_MINUTES = [30, 60, 120, 240, 600];
+const RUNTIME_STEP_MINUTES = 15;
+
+/** Sliders send 750 ms after the last input event (design §5). */
+const SLIDER_DEBOUNCE_MS = 750;
+/** Drop an optimistic override if the device never confirms it. */
+const RECONCILE_TIMEOUT_MS = 3000;
+
+/** `ha-slider` is webawesome-based and exposes `value` as a property. */
+interface SliderElement extends HTMLElement {
+  value: number;
+}
+
 @customElement('sf-bedjet-card')
 export class SfBedjetCard extends LitElement {
-  // getConfigElement is called by HA when the user opens the visual editor.
-  // The dynamic import keeps the editor code out of the main bundle — it is only
-  // loaded when actually needed, improving initial load time.
-  // TODO: If you rename your editor element in editor.ts, update the tag name below.
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    try {
-      await import('./editor');
-      const element = document.createElement('sf-bedjet-card-editor');
-      return element;
-    } catch (error) {
-      console.error('Failed to load editor:', error);
-      throw error;
-    }
+    await import('./editor');
+    return document.createElement('sf-bedjet-card-editor');
   }
 
-  // getStubConfig returns a minimal valid config used when the user adds your
-  // card from the picker without going through the editor first.
-  // TODO: Add your required fields here so the card doesn't throw on first render.
-  // Example: return { entity: 'light.living_room' };
-  public static getStubConfig(): Record<string, unknown> {
-    return {};
+  public static getStubConfig(hass?: HomeAssistant): Record<string, unknown> {
+    const entity = hass ? (Object.keys(hass.states).find((id) => id.startsWith('climate.')) ?? '') : '';
+    return { entity };
   }
 
-  // `hass` is set by HA on every state change anywhere in the system.
-  // `attribute: false` means it is set as a JS property, not an HTML attribute
-  // (the object is too large to serialize as an attribute).
-  // Lit will schedule a re-render whenever this property reference changes.
   @property({ attribute: false }) public hass!: HomeAssistant;
 
-  // `config` is private internal state set via setConfig().
-  // Using @state (instead of @property) means it won't be exposed as a public
-  // property but will still trigger re-renders when it changes.
   @state() private config!: SfBedjetCardConfig;
 
-  // setConfig is called by HA whenever the YAML config changes (including from
-  // the visual editor). It runs before the element is connected to the DOM, so
-  // you can't access `this.hass` here — it may not be set yet.
-  //
-  // Good practices:
-  //   • Throw an Error for truly invalid configs (HA will surface it as an error card).
-  //   • Spread defaults first, then the user config on top — this lets users omit
-  //     optional fields without your render() code needing null-checks everywhere.
-  //   • Never call async operations here; use connectedCallback or firstUpdated instead.
-  //
-  // https://lit.dev/docs/components/properties/#accessors-custom
+  // Optimistic overrides — rendered until the device confirms the command.
+  @state() private _tempOverride?: number;
+  @state() private _fanOverride?: number;
+  @state() private _presetOverride?: string;
+  @state() private _runtimeOverride?: number;
+
+  // Command-in-flight flags drive the subtle "sending" pulse.
+  @state() private _tempSending = false;
+  @state() private _fanSending = false;
+  @state() private _presetSending = false;
+  @state() private _runtimeSending = false;
+
+  private _tempTimer?: number;
+  private _tempPending?: number;
+  private _tempInFlight = false;
+  private _tempLastSentAt = 0;
+
+  private _fanTimer?: number;
+  private _fanPending?: number;
+  private _fanInFlight = false;
+  private _fanLastSentAt = 0;
+
+  private _presetLastSentAt = 0;
+  private _runtimeLastSentAt = 0;
+
+  private _discovery?: {
+    key: string;
+    hass: HomeAssistant;
+    result: { runtime?: string; endTime?: string; step?: string };
+  };
+
   public setConfig(config: SfBedjetCardConfig): void {
-    // TODO: Validate required fields. For example:
-    //   if (!config.entity) throw new Error('You must provide an entity.');
     if (!config) {
       throw new Error(localize('common.invalid_configuration'));
     }
+    if (config.entity && !config.entity.startsWith('climate.')) {
+      throw new Error('sf-bedjet-card requires a climate entity.');
+    }
 
-    // Merge defaults with the user-supplied config.
-    // TODO: Add your own defaults here for any optional config fields.
-    this.config = {
-      name: 'BedJet',
-      layout: 'vertical',
-      display_mode: 'card',
-      ...config,
-    };
+    this.config = { ...config };
+    this._discovery = undefined;
   }
 
-  // shouldUpdate is a performance gate — return false to skip rendering.
-  //
-  // `hasConfigOrEntityChanged` returns true when:
-  //   • `config` changed, OR
-  //   • the hass state for `config.entity` changed.
-  //
-  // This prevents unnecessary re-renders on every hass update (which fires for
-  // every entity state change in the entire system, not just yours).
-  //
-  // TODO: If your card tracks multiple entities, replace this with a custom check
-  // that watches all of them. Example:
-  //
-  //   if (!changedProps.has('hass')) return changedProps.has('config');
-  //   const oldHass = changedProps.get('hass') as HomeAssistant;
-  //   if (!oldHass) return true; // first hass update — always render
-  //   return ['sensor.a', 'sensor.b'].some(id => oldHass.states[id] !== this.hass.states[id]);
-  //
-  // https://lit.dev/docs/components/lifecycle/#reactive-update-cycle-performing
+  public getCardSize(): number {
+    return 10;
+  }
+
+  // Watch every entity the card renders, not just the climate entity.
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     if (!this.config) {
       return false;
     }
-
-    return hasConfigOrEntityChanged(this, changedProps, false);
+    if (!changedProps.has('hass')) {
+      return true;
+    }
+    const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
+    if (!oldHass || changedProps.size > 1) {
+      return true;
+    }
+    return this._watchedEntityIds().some((id) => oldHass.states[id] !== this.hass.states[id]);
   }
 
-  // render() is called by Lit whenever shouldUpdate() returns true.
-  // It must be a pure function of `this.config` and `this.hass` — no side effects.
-  //
-  // Pattern used here:
-  //   1. Guard clauses first (loading / error states) — bail out early.
-  //   2. Derive everything you need from config/hass into local consts.
-  //   3. Return a single html`` template at the end.
-  //
-  // Returning `void` (or nothing) renders nothing; HA won't show an error.
-  // Use `_showWarning` / `_showError` to surface problems to the user instead.
-  //
-  // https://lit.dev/docs/components/rendering/
-  protected render(): TemplateResult | void {
-    // TODO: Add any card-specific guards here — e.g. check for a required
-    // config field before trying to use it.
-    if (this.config.show_warning) {
-      return this._showWarning(localize('common.show_warning'));
+  protected willUpdate(changedProps: PropertyValues): void {
+    if (changedProps.has('hass') && this.hass && this.config) {
+      this._reconcile();
+    }
+  }
+
+  // ── Entity discovery ──────────────────────────────────────────────
+
+  private get _runtimeEntity(): string | undefined {
+    return this._discover().runtime;
+  }
+
+  private get _endTimeEntity(): string | undefined {
+    return this._discover().endTime;
+  }
+
+  private get _stepEntity(): string | undefined {
+    return this._discover().step;
+  }
+
+  private _watchedEntityIds(): string[] {
+    return [this.config.entity, this._runtimeEntity, this._endTimeEntity, this._stepEntity].filter((id): id is string =>
+      Boolean(id),
+    );
+  }
+
+  private _climateObjectId(): string {
+    return this.config.entity.split('.')[1] ?? '';
+  }
+
+  private _discover(): { runtime?: string; endTime?: string; step?: string } {
+    if (this._discovery && this._discovery.key === this.config.entity && this._discovery.hass === this.hass) {
+      return this._discovery.result;
     }
 
-    if (this.config.show_error) {
-      return this._showError(localize('common.show_error'));
+    const result = {
+      runtime: this.config.runtime_entity,
+      endTime: this.config.end_time_entity,
+      step: this.config.step_entity,
+    };
+
+    const wanted: Array<[keyof typeof result, 'number' | 'sensor', string]> = [
+      ['runtime', 'number', 'runtime_remaining'],
+      ['endTime', 'sensor', 'run_end_time'],
+      ['step', 'sensor', 'bio_sequence_step'],
+    ];
+
+    const hass = this.hass as unknown as { entities?: Record<string, BedjetRegistryEntry> };
+    const entities = hass.entities;
+    const deviceId = entities?.[this.config.entity]?.device_id;
+    const objectId = this._climateObjectId();
+
+    if (entities) {
+      for (const [id, entry] of Object.entries(entities)) {
+        if (!entry.device_id || !deviceId || entry.device_id !== deviceId) {
+          continue;
+        }
+        const [domain, entityObjectId] = id.split('.');
+        for (const [slot, wantedDomain, translationKey] of wanted) {
+          if (result[slot] || domain !== wantedDomain) {
+            continue;
+          }
+          if (
+            entry.translation_key === translationKey ||
+            entityObjectId === `${objectId}_${translationKey}` ||
+            entityObjectId.endsWith(`_${translationKey}`)
+          ) {
+            result[slot] = id;
+          }
+        }
+      }
     }
 
-    // `hass` is set asynchronously after the element is created.
-    // Showing a skeleton avoids a flash of broken content on first load.
+    // Fallback: match by the standard `<device>_<key>` entity id suffix. This
+    // keeps the card working when the registry display entries are unavailable.
+    for (const [slot, domain, translationKey] of wanted) {
+      if (result[slot]) {
+        continue;
+      }
+      const candidate = `${domain}.${objectId}_${translationKey}`;
+      if (this.hass.states[candidate]) {
+        result[slot] = candidate;
+      }
+    }
+
+    this._discovery = { key: this.config.entity, hass: this.hass, result };
+    return result;
+  }
+
+  // ── State helpers ─────────────────────────────────────────────────
+
+  private _fanPercent(stateObj: HassEntity): number {
+    const fanMode = stateObj.attributes.fan_mode as string | undefined;
+    if (!fanMode) {
+      return 0;
+    }
+    const value = parseInt(fanMode.replace('%', ''), 10);
+    return Number.isNaN(value) ? 0 : value;
+  }
+
+  private _isProgramRunning(stateObj: HassEntity): boolean {
+    const stepId = this._stepEntity;
+    if (stepId) {
+      const stepObj = this.hass.states[stepId];
+      const step = stepObj ? Number(stepObj.state) : NaN;
+      if (!Number.isNaN(step)) {
+        return step > 0;
+      }
+    }
+    // Fallback heuristic: during biorhythm "Wait" steps the climate entity
+    // reports `off` while the fan is still running.
+    return stateObj.state === 'off' && this._fanPercent(stateObj) > 0;
+  }
+
+  private _temperatureUnit(stateObj: HassEntity): string {
+    return (stateObj.attributes.temperature_unit as string | undefined) ?? this.hass.config.unit_system.temperature;
+  }
+
+  private _tempStep(stateObj: HassEntity): number {
+    const step = stateObj.attributes.target_temp_step as number | undefined;
+    if (typeof step === 'number' && step > 0) {
+      return step;
+    }
+    return this._temperatureUnit(stateObj).toUpperCase().includes('F') ? 1 : 0.5;
+  }
+
+  private _formatTemp(value: number | undefined, step: number): string {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return '--';
+    }
+    const decimals = step < 1 ? 1 : 0;
+    const snapped = Math.round(value * 10 ** decimals) / 10 ** decimals;
+    return Number.isInteger(snapped) ? String(snapped) : snapped.toFixed(decimals);
+  }
+
+  private _formatRuntime(minutes: number | undefined): string {
+    if (typeof minutes !== 'number' || Number.isNaN(minutes) || minutes <= 0) {
+      return `0${localize('bedjet.minutes_short')}`;
+    }
+    const total = Math.round(minutes);
+    const hours = Math.floor(total / 60);
+    const mins = total % 60;
+    const h = localize('bedjet.hours_short');
+    const m = localize('bedjet.minutes_short');
+    if (hours) {
+      return mins ? `${hours}${h} ${mins}${m}` : `${hours}${h}`;
+    }
+    return `${mins}${m}`;
+  }
+
+  private _isMemoryPreset(name: string | undefined): boolean {
+    return !!name && /^M[123]:/.test(name);
+  }
+
+  private _presetLabel(name: string): string {
+    if (name === 'None') {
+      return localize('bedjet.none');
+    }
+    if (name === 'Turbo') {
+      return localize('bedjet.turbo');
+    }
+    if (name === 'Extended Heat') {
+      return localize('bedjet.extended_heat');
+    }
+    return name;
+  }
+
+  private _presetOptions(stateObj: HassEntity): Array<{ value: string; label: string }> {
+    const raw = (stateObj.attributes.preset_modes as string[] | undefined) ?? [];
+    const programs = raw.filter((name) => name !== 'None' && !this._isMemoryPreset(name));
+    const options: Array<{ value: string; label: string }> = [{ value: 'None', label: localize('bedjet.none') }];
+    for (const name of programs) {
+      options.push({ value: name, label: this._presetLabel(name) });
+    }
+    return options;
+  }
+
+  private _selectValue(stateObj: HassEntity): string {
+    const override = this._presetOverride;
+    if (override !== undefined) {
+      return this._isMemoryPreset(override) ? 'None' : override;
+    }
+    const real = stateObj.attributes.preset_mode as string | null | undefined;
+    if (!real || this._isMemoryPreset(real)) {
+      return 'None';
+    }
+    return real;
+  }
+
+  private _runtimeDisplay(): number | undefined {
+    if (this._runtimeOverride !== undefined) {
+      return this._runtimeOverride;
+    }
+    const id = this._runtimeEntity;
+    if (!id) {
+      return undefined;
+    }
+    const stateObj = this.hass.states[id];
+    if (!stateObj) {
+      return undefined;
+    }
+    const value = Number(stateObj.state);
+    return Number.isNaN(value) ? undefined : value;
+  }
+
+  private _runtimeMax(): number {
+    const id = this._runtimeEntity;
+    const max = id ? (this.hass.states[id]?.attributes.max as number | undefined) : undefined;
+    return typeof max === 'number' && max > 0 ? max : QUICK_SET_MINUTES[QUICK_SET_MINUTES.length - 1];
+  }
+
+  private _isRuntimeEditable(stateObj: HassEntity): boolean {
+    if (this._isProgramRunning(stateObj)) {
+      return false;
+    }
+    const preset = stateObj.attributes.preset_mode as string | null | undefined;
+    if (preset === 'Turbo') {
+      return false;
+    }
+    return stateObj.state === 'heat' || stateObj.state === 'cool' || stateObj.state === 'dry';
+  }
+
+  private _isTurbo(stateObj: HassEntity): boolean {
+    return stateObj.attributes.preset_mode === 'Turbo' || this._presetOverride === 'Turbo';
+  }
+
+  private _endsText(stateObj: HassEntity): string {
+    const id = this._endTimeEntity;
+    let end: Date | undefined;
+    if (id) {
+      const stateObjEnd = this.hass.states[id];
+      if (stateObjEnd && stateObjEnd.state && !['unknown', 'unavailable'].includes(stateObjEnd.state)) {
+        const parsed = new Date(stateObjEnd.state);
+        if (!Number.isNaN(parsed.getTime())) {
+          end = parsed;
+        }
+      }
+    }
+    if (!end) {
+      const remaining = this._runtimeDisplay();
+      if (this._isRuntimeEditable(stateObj) && remaining && remaining > 0) {
+        end = new Date(Date.now() + remaining * 60_000);
+      }
+    }
+    if (!end) {
+      return '';
+    }
+    const time = end.toLocaleTimeString(this.hass.language, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    return `${localize('bedjet.ends')} ${time}`;
+  }
+
+  private _clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  // ── Services ──────────────────────────────────────────────────────
+
+  private _callClimate(service: string, data: Record<string, unknown>): Promise<void> {
+    return this.hass.callService('climate', service, {
+      entity_id: this.config.entity,
+      ...data,
+    });
+  }
+
+  private _setMode(mode: Mode): void {
+    this._presetOverride = undefined;
+    this._callClimate('set_hvac_mode', { hvac_mode: mode });
+  }
+
+  private _onPresetSelected(ev: CustomEvent<{ value?: string | number }>): void {
+    const value = ev.detail?.value;
+    if (value === undefined || value === null) {
+      return;
+    }
+    const preset = String(value);
+    this._presetOverride = preset;
+    this._presetSending = true;
+    this._presetLastSentAt = Date.now();
+    this._callClimate('set_preset_mode', { preset_mode: preset }).finally(() => {
+      this._presetSending = false;
+    });
+  }
+
+  private _stopProgram(): void {
+    this._presetOverride = undefined;
+    this._callClimate('set_hvac_mode', { hvac_mode: 'off' });
+  }
+
+  private _scheduleTemp(value: number): void {
+    this._tempPending = value;
+    if (this._tempTimer !== undefined) {
+      window.clearTimeout(this._tempTimer);
+    }
+    this._tempTimer = window.setTimeout(() => {
+      this._tempTimer = undefined;
+      this._sendTemp();
+    }, SLIDER_DEBOUNCE_MS);
+  }
+
+  private _onTempInput(ev: Event): void {
+    const value = (ev.target as SliderElement).value;
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return;
+    }
+    this._tempOverride = value;
+    this._scheduleTemp(value);
+  }
+
+  private _onTempChange(ev: Event): void {
+    const value = (ev.target as SliderElement).value;
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return;
+    }
+    this._tempOverride = value;
+    this._tempPending = value;
+    if (this._tempTimer !== undefined) {
+      window.clearTimeout(this._tempTimer);
+      this._tempTimer = undefined;
+    }
+    this._sendTemp();
+  }
+
+  private _sendTemp = (): void => {
+    if (this._tempPending === undefined) {
+      return;
+    }
+    if (this._tempInFlight) {
+      // Coalesce: keep the newest value and retry once the in-flight call ends.
+      this._scheduleTemp(this._tempPending);
+      return;
+    }
+    const value = this._tempPending;
+    this._tempPending = undefined;
+    this._tempInFlight = true;
+    this._tempSending = true;
+    this._tempLastSentAt = Date.now();
+    this._callClimate('set_temperature', { temperature: value })
+      .catch(() => undefined)
+      .finally(() => {
+        this._tempInFlight = false;
+        this._tempSending = false;
+        if (this._tempPending !== undefined) {
+          this._scheduleTemp(this._tempPending);
+        }
+      });
+  };
+
+  private _scheduleFan(value: number): void {
+    this._fanPending = value;
+    if (this._fanTimer !== undefined) {
+      window.clearTimeout(this._fanTimer);
+    }
+    this._fanTimer = window.setTimeout(() => {
+      this._fanTimer = undefined;
+      this._sendFan();
+    }, SLIDER_DEBOUNCE_MS);
+  }
+
+  private _onFanInput(ev: Event): void {
+    const value = (ev.target as SliderElement).value;
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return;
+    }
+    this._fanOverride = value;
+    this._scheduleFan(value);
+  }
+
+  private _onFanChange(ev: Event): void {
+    const value = (ev.target as SliderElement).value;
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return;
+    }
+    this._fanOverride = value;
+    this._fanPending = value;
+    if (this._fanTimer !== undefined) {
+      window.clearTimeout(this._fanTimer);
+      this._fanTimer = undefined;
+    }
+    this._sendFan();
+  }
+
+  private _sendFan = (): void => {
+    if (this._fanPending === undefined) {
+      return;
+    }
+    if (this._fanInFlight) {
+      this._scheduleFan(this._fanPending);
+      return;
+    }
+    const value = this._fanPending;
+    this._fanPending = undefined;
+    this._fanInFlight = true;
+    this._fanSending = true;
+    this._fanLastSentAt = Date.now();
+    // The fan is a climate fan_mode ("75%") — using fan.set_percentage would
+    // implicitly power the device on in Cool mode (design §3).
+    this._callClimate('set_fan_mode', { fan_mode: `${value}%` })
+      .catch(() => undefined)
+      .finally(() => {
+        this._fanInFlight = false;
+        this._fanSending = false;
+        if (this._fanPending !== undefined) {
+          this._scheduleFan(this._fanPending);
+        }
+      });
+  };
+
+  private _setRuntime(minutes: number): void {
+    const id = this._runtimeEntity;
+    if (!id) {
+      return;
+    }
+    const value = this._clamp(Math.round(minutes), 0, this._runtimeMax());
+    this._runtimeOverride = value;
+    this._runtimeSending = true;
+    this._runtimeLastSentAt = Date.now();
+    this.hass
+      .callService('number', 'set_value', { entity_id: id, value })
+      .catch(() => undefined)
+      .finally(() => {
+        this._runtimeSending = false;
+      });
+  }
+
+  private _adjustRuntime(delta: number): void {
+    const current = this._runtimeDisplay() ?? 0;
+    this._setRuntime(current + delta);
+  }
+
+  private _reconcile(): void {
+    const stateObj = this.hass.states[this.config.entity];
+    if (!stateObj) {
+      return;
+    }
+    const now = Date.now();
+    const idempotent = now - RECONCILE_TIMEOUT_MS;
+
+    if (this._tempOverride !== undefined) {
+      const real = stateObj.attributes.target_temperature;
+      if (typeof real === 'number' && Math.abs(real - this._tempOverride) < 0.05) {
+        this._tempOverride = undefined;
+      } else if (
+        !this._tempInFlight &&
+        this._tempPending === undefined &&
+        this._tempLastSentAt > 0 &&
+        this._tempLastSentAt < idempotent
+      ) {
+        this._tempOverride = undefined;
+      }
+    }
+
+    if (this._fanOverride !== undefined) {
+      const real = this._fanPercent(stateObj);
+      if (Math.abs(real - this._fanOverride) < 1) {
+        this._fanOverride = undefined;
+      } else if (
+        !this._fanInFlight &&
+        this._fanPending === undefined &&
+        this._fanLastSentAt > 0 &&
+        this._fanLastSentAt < idempotent
+      ) {
+        this._fanOverride = undefined;
+      }
+    }
+
+    if (this._presetOverride !== undefined && !this._isProgramRunning(stateObj)) {
+      const real = stateObj.attributes.preset_mode as string | null | undefined;
+      const matched = this._presetOverride === 'None' ? real == null || real === 'None' : real === this._presetOverride;
+      if (matched || (this._presetLastSentAt > 0 && this._presetLastSentAt < idempotent)) {
+        this._presetOverride = undefined;
+      }
+    }
+
+    if (this._runtimeOverride !== undefined && this._runtimeEntity) {
+      const runtimeObj = this.hass.states[this._runtimeEntity];
+      const real = runtimeObj ? Number(runtimeObj.state) : NaN;
+      if (!Number.isNaN(real) && Math.abs(real - this._runtimeOverride) <= 1) {
+        this._runtimeOverride = undefined;
+      } else if (this._runtimeLastSentAt > 0 && this._runtimeLastSentAt < idempotent) {
+        this._runtimeOverride = undefined;
+      }
+    }
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────
+
+  protected render(): TemplateResult | typeof nothing {
     if (!this.hass) {
-      return this._renderSkeleton();
+      return nothing;
     }
-
     if (!this.config.entity) {
-      return this._showError('No entity defined');
+      return this._showError(localize('bedjet.no_entity'));
     }
-
     const stateObj = this.hass.states[this.config.entity];
     if (!stateObj) {
       return this._showError(`Entity not found: ${this.config.entity}`);
     }
 
-    // Badge / chip mode — no ha-card wrapper
-    if (this.config.display_mode === 'badge') {
-      return this._renderBadge(stateObj);
-    }
-
-    const actionHandlerConfig = {
-      hasHold: hasAction(this.config.hold_action),
-      hasDoubleClick: hasAction(this.config.double_tap_action),
-      repeat: this.config.hold_action?.repeat,
-      repeatLimit: this.config.hold_action?.repeat_limit,
-      isMomentary: !!(this.config.press_action || this.config.release_action),
-      disableKbd: false,
-    };
-
-    const accentColor = this.config.accent_color;
-    const inlineStyle = accentColor
-      ? `--card-accent-color: rgb(${accentColor[0]},${accentColor[1]},${accentColor[2]});`
-      : '';
-    const layoutClass = `layout-${this.config.layout || 'vertical'}`;
-    const styleClass = `style-${this.config.card_style || 'default'}`;
-
-    // Horizontal: suppress ha-card header — content fills the whole row
-    const cardHeader = this.config.layout === 'horizontal' ? undefined : this.config.name;
-
-    return html`
-      <ha-card
-        .header=${cardHeader}
-        @action=${this._handleAction}
-        ${actionHandler(actionHandlerConfig)}
-        .config=${this.config}
-        tabindex="0"
-        .label=${`BedJet: ${this.config.entity}`}
-        class="clickable-card ${styleClass} ${layoutClass}"
-        style=${inlineStyle}
-      >
-        ${this._renderContent(stateObj)}
-        <ha-ripple
-          .disabled=${!hasAction(this.config.tap_action) &&
-          !hasAction(this.config.hold_action) &&
-          !hasAction(this.config.double_tap_action)}
-        ></ha-ripple>
-      </ha-card>
-    `;
-  }
-
-  private _renderSkeleton(): TemplateResult {
     return html`
       <ha-card>
-        <div class="card-content skeleton-content">
-          <div class="skeleton-row">
-            <div class="skeleton skeleton-icon"></div>
-            <div class="skeleton-text-block">
-              <div class="skeleton skeleton-name"></div>
-              <div class="skeleton skeleton-state"></div>
-            </div>
-          </div>
-          <div class="skeleton skeleton-attr"></div>
-          <div class="skeleton skeleton-attr skeleton-attr--short"></div>
+        <div class="header">
+          <span class="devname">${this._deviceName(stateObj)}</span>
         </div>
+        ${this._renderReadout(stateObj)} ${this._renderModes(stateObj)} ${this._renderTempRow(stateObj)}
+        ${this._renderFanRow(stateObj)} ${this._renderProgramRow(stateObj)} ${this._renderRuntimeRow(stateObj)}
       </ha-card>
     `;
   }
 
-  private _renderBadge(stateObj: HassEntity): TemplateResult {
-    const accentColor = this.config.accent_color;
-    const inlineStyle = accentColor
-      ? `--card-accent-color: rgb(${accentColor[0]},${accentColor[1]},${accentColor[2]});`
-      : '';
-    return html`
-      <div
-        class="badge"
-        style=${inlineStyle}
-        @click=${this._handleEntityClick}
-        role="button"
-        tabindex="0"
-        aria-label=${`${computeName(stateObj)}: ${computeState(stateObj)}`}
-      >
-        <ha-icon class="badge-icon" .icon=${computeIcon(stateObj, this.config.icon)}></ha-icon>
-        <span class="badge-name">${computeName(stateObj)}</span>
-        <span class="badge-state">${computeState(stateObj)}</span>
-      </div>
-    `;
+  private _deviceName(stateObj: HassEntity): string {
+    return this.config.name ?? (stateObj.attributes.friendly_name as string | undefined) ?? stateObj.entity_id;
   }
 
-  // _renderContent separates layout logic from the main render() method.
-  // Splitting complex templates into private helper methods keeps render()
-  // readable at a glance. Each helper should have a single responsibility.
-  private _renderContent(stateObj: HassEntity): TemplateResult {
-    const isHorizontal = this.config.layout === 'horizontal';
-    const isMinimal = this.config.card_style === 'minimal';
-
-    if (isHorizontal) {
-      // Single compact row: icon · name+state · spacer · action buttons
-      return html`
-        <div class="card-content horizontal-strip">
-          <div class="icon">
-            <ha-icon .icon=${computeIcon(stateObj, this.config.icon)}></ha-icon>
-          </div>
-          <div class="entity-info">
-            <div class="name">${this.config.name ?? computeName(stateObj)}</div>
-            <div class="state">${computeState(stateObj)}</div>
-          </div>
-          <div class="horizontal-actions">${this._renderActionButtons(stateObj)}</div>
-        </div>
-      `;
-    }
-
-    // Vertical (default) — stacked sections
-    const entityRow = html`
-      <div class="entity-row clickable-row" @click=${this._handleEntityClick}>
-        <div class="icon">
-          <ha-icon .icon=${computeIcon(stateObj, this.config.icon)}></ha-icon>
-        </div>
-        <div class="entity-info">
-          <div class="name">${computeName(stateObj)}</div>
-          <div class="state">${computeState(stateObj)}</div>
-        </div>
-        <div class="entity-actions"><div class="toggle-hint">Tap to toggle</div></div>
-      </div>
-    `;
+  private _renderReadout(stateObj: HassEntity): TemplateResult {
+    const unit = this._temperatureUnit(stateObj);
+    const step = this._tempStep(stateObj);
+    const target = this._tempOverride ?? (stateObj.attributes.target_temperature as number | undefined);
+    const current = stateObj.attributes.current_temperature as number | undefined;
 
     return html`
-      <div class="card-content">
-        ${entityRow} ${!isMinimal ? this._renderAttributes(stateObj, this.config.attribute_limit ?? 3) : ''}
-        ${!isMinimal ? this._renderActionButtons(stateObj) : ''}
-        ${this.config.show_timestamps !== false
-          ? html`
-              <div class="timestamps">
-                <div class="last-changed"><strong>Last Changed:</strong> ${formatTimestamp(stateObj.last_changed)}</div>
-                <div class="last-updated"><strong>Last Updated:</strong> ${formatTimestamp(stateObj.last_updated)}</div>
-              </div>
-            `
-          : ''}
+      <div class="readout ${stateObj.state === 'off' ? 'is-off' : ''}">
+        <div class="ro-col">
+          <div class="ro-value">
+            <span class="ro-num">${this._formatTemp(target, step)}</span>
+            <span class="ro-unit">${unit}</span>
+          </div>
+          <div class="ro-label">${localize('bedjet.setting')}</div>
+        </div>
+        <div class="ro-divider"></div>
+        <div class="ro-col">
+          <div class="ro-value">
+            <span class="ro-num">${this._formatTemp(current, step)}</span>
+            <span class="ro-unit">${unit}</span>
+          </div>
+          <div class="ro-label">${localize('bedjet.actual')}</div>
+        </div>
       </div>
     `;
   }
 
-  // _handleAction is wired to the `@action` DOM event emitted by the
-  // action-handler directive. `handleAction` from custom-card-helpers reads
-  // ev.detail.action ('tap' | 'hold' | 'double_tap') and executes whichever
-  // ActionConfig the user configured (navigate, more-info, call-service, etc.).
-  //
-  // TODO: You can intercept specific actions here before delegating, e.g.
-  //   if (ev.detail.action === 'tap') { /* custom tap logic */ return; }
-  private _handleAction(ev: ActionHandlerEvent): void {
-    if (this.hass && this.config && ev.detail.action) {
-      handleAction(this, this.hass, this.config, ev.detail.action);
+  private _renderModes(stateObj: HassEntity): TemplateResult {
+    const hvacModes = (stateObj.attributes.hvac_modes as string[] | undefined) ?? [];
+    const modes: Mode[] = ['heat', 'cool'];
+    if (hvacModes.includes('dry')) {
+      modes.push('dry');
+    }
+    modes.push('off');
+
+    const unavailable = stateObj.state === 'unavailable';
+    const running = this._isProgramRunning(stateObj);
+    const activeMode: Mode | undefined = running
+      ? undefined
+      : stateObj.state === 'heat'
+        ? 'heat'
+        : stateObj.state === 'cool'
+          ? 'cool'
+          : stateObj.state === 'dry'
+            ? 'dry'
+            : stateObj.state === 'off'
+              ? 'off'
+              : undefined;
+
+    return html`
+      <ha-control-select
+        class="modes"
+        hide-option-label
+        .disabled=${unavailable}
+        .value=${activeMode}
+        .options=${modes.map((mode) => ({
+          value: mode,
+          label: localize(`bedjet.mode_${mode}`),
+          ariaLabel: localize(`bedjet.mode_${mode}`),
+          icon: html`<ha-icon icon=${MODE_ICONS[mode]}></ha-icon>`,
+        }))}
+        @value-changed=${this._onModeChanged}
+      ></ha-control-select>
+    `;
+  }
+
+  private _onModeChanged(ev: CustomEvent<{ value?: string }>): void {
+    const mode = ev.detail?.value;
+    if (mode === 'heat' || mode === 'cool' || mode === 'dry' || mode === 'off') {
+      this._setMode(mode);
     }
   }
 
-  // _handleEntityClick demonstrates direct service calls without going through
-  // the configured tap_action. It shows how to branch on entity domain and call
-  // the appropriate HA service.
-  //
-  // In a real card you'd typically rely on handleAction() with tap_action instead
-  // of writing domain-specific logic here — this is for educational purposes.
-  private _handleEntityClick(ev: Event): void {
-    ev.stopPropagation();
-    if (!this.config.entity || !this.hass) return;
+  private _renderTempRow(stateObj: HassEntity): TemplateResult {
+    const unit = this._temperatureUnit(stateObj);
+    const step = this._tempStep(stateObj);
+    const min = (stateObj.attributes.min_temp as number | undefined) ?? 19;
+    const max = (stateObj.attributes.max_temp as number | undefined) ?? 43;
+    const value = this._tempOverride ?? (stateObj.attributes.target_temperature as number | undefined);
+    const disabled = this._slidersDisabled(stateObj);
 
-    const stateObj = this.hass.states[this.config.entity];
-    if (!stateObj) return;
+    return html`
+      <div class="row">
+        <div class="rowhead">
+          <span class="label">${localize('bedjet.target_temp')}</span>
+          <span class="val">${this._formatTemp(value, step)}${unit}</span>
+        </div>
+        <ha-slider
+          class=${this._tempSending ? 'sending' : ''}
+          .min=${min}
+          .max=${max}
+          .step=${step}
+          .value=${value ?? min}
+          .disabled=${disabled}
+          @input=${this._onTempInput}
+          @change=${this._onTempChange}
+        ></ha-slider>
+      </div>
+    `;
+  }
 
-    // Demonstrate entity toggle functionality
-    const domain = stateObj.entity_id.split('.')[0];
+  private _renderFanRow(stateObj: HassEntity): TemplateResult {
+    const value = this._fanOverride ?? this._fanPercent(stateObj);
+    const disabled = this._slidersDisabled(stateObj);
 
-    switch (domain) {
-      case 'light':
-      case 'switch':
-      case 'fan':
-        this._callService(domain, 'toggle', { entity_id: this.config.entity });
-        break;
-      case 'cover': {
-        const coverState = stateObj.state;
-        const service = coverState === 'open' ? 'close_cover' : 'open_cover';
-        this._callService('cover', service, { entity_id: this.config.entity });
-        break;
-      }
-      case 'lock': {
-        const lockState = stateObj.state;
-        const lockService = lockState === 'locked' ? 'unlock' : 'lock';
-        this._callService('lock', lockService, { entity_id: this.config.entity });
-        break;
-      }
-      default:
-        // For other entities, show more info
-        this._showMoreInfo(this.config.entity);
+    return html`
+      <div class="row">
+        <div class="rowhead">
+          <span class="label">${localize('bedjet.fan')}</span>
+          <span class="val">${value}%</span>
+        </div>
+        <ha-slider
+          class=${this._fanSending ? 'sending' : ''}
+          .min=${5}
+          .max=${100}
+          .step=${5}
+          .value=${value}
+          .disabled=${disabled}
+          @input=${this._onFanInput}
+          @change=${this._onFanChange}
+        ></ha-slider>
+      </div>
+    `;
+  }
+
+  private _renderProgramRow(stateObj: HassEntity): TemplateResult {
+    const running = this._isProgramRunning(stateObj);
+    const stepId = this._stepEntity;
+    const stepValue = stepId ? this.hass.states[stepId]?.state : undefined;
+    const stepLabel =
+      running && stepValue && !Number.isNaN(Number(stepValue))
+        ? `${localize('bedjet.running')} · ${localize('bedjet.step')} ${stepValue}`
+        : running
+          ? localize('bedjet.running')
+          : '';
+
+    return html`
+      <div class="row">
+        <div class="rowhead">
+          <span class="label">${localize('bedjet.program')}</span>
+          <span class="progstep">${stepLabel}</span>
+        </div>
+        <div class="progline">
+          <ha-select
+            class=${this._presetSending ? 'sending' : ''}
+            .options=${this._presetOptions(stateObj)}
+            .value=${this._selectValue(stateObj)}
+            .disabled=${stateObj.state === 'unavailable'}
+            @selected=${this._onPresetSelected}
+          ></ha-select>
+          ${running
+            ? html`
+                <ha-icon-button class="stopbtn" .label=${localize('bedjet.stop')} @click=${this._stopProgram}>
+                  <ha-icon icon="mdi:stop"></ha-icon>
+                </ha-icon-button>
+              `
+            : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderRuntimeRow(stateObj: HassEntity): TemplateResult {
+    if (!this._runtimeEntity) {
+      return html``;
     }
+    const remaining = this._runtimeDisplay();
+    const editable = this._isRuntimeEditable(stateObj);
+    const ends = this._endsText(stateObj);
+
+    return html`
+      <div class="row">
+        <div class="rowhead">
+          <span class="label">${localize('bedjet.time_remaining')}</span>
+          <span class="val end">
+            ${ends ? html`<ha-icon class="clock" icon="mdi:clock-outline"></ha-icon>` : nothing} ${ends}
+          </span>
+        </div>
+        <div class="rt ${editable ? '' : 'dimmed'} ${this._runtimeSending ? 'sending' : ''}">
+          <div class="stepper">
+            <ha-icon-button
+              .label=${localize('bedjet.decrease')}
+              .disabled=${!editable || (remaining ?? 0) <= 0}
+              @click=${() => this._adjustRuntime(-RUNTIME_STEP_MINUTES)}
+            >
+              <ha-icon icon="mdi:minus"></ha-icon>
+            </ha-icon-button>
+            <span class="rtval">${this._formatRuntime(remaining)}</span>
+            <ha-icon-button
+              .label=${localize('bedjet.increase')}
+              .disabled=${!editable}
+              @click=${() => this._adjustRuntime(RUNTIME_STEP_MINUTES)}
+            >
+              <ha-icon icon="mdi:plus"></ha-icon>
+            </ha-icon-button>
+          </div>
+          <ha-chip-set class="chips">
+            ${QUICK_SET_MINUTES.map((minutes) => {
+              const selected = editable && Math.round(remaining ?? -1) === minutes;
+              return html`
+                <ha-assist-chip
+                  class=${selected ? 'selected' : ''}
+                  .label=${this._formatRuntime(minutes)}
+                  .active=${selected}
+                  .filled=${selected}
+                  .disabled=${!editable}
+                  @click=${() => this._setRuntime(minutes)}
+                ></ha-assist-chip>
+              `;
+            })}
+          </ha-chip-set>
+        </div>
+      </div>
+    `;
   }
 
-  private _callService(domain: string, service: string, serviceData: Record<string, unknown>): void {
-    this.hass.callService(domain, service, serviceData);
-  }
-
-  private _showMoreInfo(entityId: string): void {
-    const event = new Event('hass-more-info', {
-      bubbles: true,
-      composed: true,
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (event as any).detail = { entityId };
-    this.dispatchEvent(event);
-  }
-
-  private _navigate(path: string): void {
-    window.history.pushState(null, '', path);
-    const event = new Event('location-changed', {
-      bubbles: true,
-      composed: true,
-    });
-    this.dispatchEvent(event);
-  }
-
-  private _showWarning(warning: string): TemplateResult {
-    return html` <hui-warning>${warning}</hui-warning> `;
+  private _slidersDisabled(stateObj: HassEntity): boolean {
+    if (stateObj.state === 'unavailable') {
+      return true;
+    }
+    return this._isProgramRunning(stateObj) || stateObj.state === 'off' || this._isTurbo(stateObj);
   }
 
   private _showError(error: string): TemplateResult {
     const errorCard = document.createElement('hui-error-card');
-    errorCard.setConfig({
-      type: 'error',
-      error,
-      origConfig: this.config,
-    });
-
-    return html` ${errorCard} `;
+    errorCard.setConfig({ type: 'error', error, origConfig: this.config });
+    return html`${errorCard}`;
   }
 
-  // _renderAttributes shows a filtered subset of entity attributes.
-  //
-  // Why filter? `stateObj.attributes` can contain dozens of keys (HA internals,
-  // integration-specific data, etc.). Displaying everything would be noisy.
-  //
-  // TODO: Replace `importantAttrs` with the attributes relevant to your card's
-  // domain, or make the list configurable via `config.attribute_config`.
-  private _renderAttributes(stateObj: HassEntity, limit = 3): TemplateResult {
-    if (limit === 0) return html``;
-    // TODO: Adjust this list to match the attributes your card cares about.
-    const importantAttrs = ['battery_level', 'temperature', 'humidity', 'brightness', 'volume_level'];
-    const attrs = Object.entries(stateObj.attributes)
-      .filter(([key, _]) => importantAttrs.includes(key))
-      .slice(0, limit);
-
-    if (attrs.length === 0) {
-      return html``;
-    }
-
-    return html`
-      <div class="attributes">
-        <strong>Attributes:</strong>
-        ${attrs.map(
-          ([key, value]) => html`
-            <div class="attribute">
-              <span class="attr-key">${key.replace(/_/g, ' ')}:</span>
-              <span class="attr-value">${value}</span>
-            </div>
-          `,
-        )}
-      </div>
-    `;
-  }
-
-  // _renderActionButtons exists purely to demonstrate the different action
-  // mechanisms available in HA custom cards. In a production card you would
-  // replace (or remove) this section with domain-appropriate controls.
-  //
-  // The four patterns shown:
-  //   1. `_showMoreInfo`  — fires the hass-more-info event (HA's built-in detail dialog)
-  //   2. `_navigate`      — pushes a path to the HA router
-  //   3. Domain buttons   — directly call HA services via `hass.callService`
-  //   4. `_handleDemoServiceCall` — creates a persistent notification via service call
-  //
-  // TODO: Remove or replace this method with the controls your card actually needs.
-  private _renderActionButtons(stateObj: HassEntity): TemplateResult {
-    return html`
-      <div class="action-buttons">
-        <div class="action-section">
-          <h4>Action Examples:</h4>
-
-          <button
-            class="action-button primary"
-            @click=${() => this._showMoreInfo(stateObj.entity_id)}
-            title="Tap Action: More Info"
-          >
-            <ha-icon icon="mdi:information"></ha-icon>
-            More Info
-          </button>
-
-          <button
-            class="action-button secondary"
-            @click=${() => this._navigate('/logbook')}
-            title="Navigate Action: Go to Logbook"
-          >
-            <ha-icon icon="mdi:book-open-variant"></ha-icon>
-            Logbook
-          </button>
-
-          ${this._renderDomainSpecificButtons(stateObj)}
-
-          <button
-            class="action-button service"
-            @click=${this._handleDemoServiceCall}
-            title="Service Call: Persistent Notification"
-          >
-            <ha-icon icon="mdi:bell"></ha-icon>
-            Demo Service
-          </button>
-        </div>
-
-        <div class="action-hints">
-          <div class="hint"><strong>Try:</strong> Tap entity row, Hold card, Double-tap card</div>
-          <div class="hint"><strong>Configured actions:</strong> ${this._getConfiguredActions()}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  private _renderDomainSpecificButtons(stateObj: HassEntity): TemplateResult {
-    const domain = stateObj.entity_id.split('.')[0];
-
-    switch (domain) {
-      case 'light':
-        return html`
-          <button
-            class="action-button toggle"
-            @click=${() => this._callService('light', 'toggle', { entity_id: stateObj.entity_id })}
-          >
-            <ha-icon icon="mdi:lightbulb"></ha-icon>
-            Toggle Light
-          </button>
-        `;
-      case 'switch':
-        return html`
-          <button
-            class="action-button toggle"
-            @click=${() => this._callService('switch', 'toggle', { entity_id: stateObj.entity_id })}
-          >
-            <ha-icon icon="mdi:toggle-switch"></ha-icon>
-            Toggle Switch
-          </button>
-        `;
-      case 'climate':
-        return html`
-          <button
-            class="action-button service"
-            @click=${() =>
-              this._callService('climate', 'set_temperature', { entity_id: stateObj.entity_id, temperature: 22 })}
-          >
-            <ha-icon icon="mdi:thermostat"></ha-icon>
-            Set 22°C
-          </button>
-        `;
-      default:
-        return html``;
-    }
-  }
-
-  private _handleDemoServiceCall(): void {
-    this._callService('persistent_notification', 'create', {
-      title: 'Demo Service Call',
-      message: `This notification was created by the sf-bedjet card at ${new Date().toLocaleTimeString()}`,
-      notification_id: 'sf_bedjet_demo',
-    });
-  }
-
-  private _getConfiguredActions(): string {
-    const actions = [];
-    if (this.config.tap_action && this.config.tap_action.action !== 'none') {
-      actions.push(`Tap: ${this.config.tap_action.action}`);
-    }
-    if (this.config.hold_action && this.config.hold_action.action !== 'none') {
-      actions.push(`Hold: ${this.config.hold_action.action}`);
-    }
-    if (this.config.double_tap_action && this.config.double_tap_action.action !== 'none') {
-      actions.push(`Double-tap: ${this.config.double_tap_action.action}`);
-    }
-    return actions.length > 0 ? actions.join(', ') : 'None configured';
-  }
-
-  // Styles are encapsulated inside the Shadow DOM — they cannot leak out and
-  // external page styles cannot leak in (except for CSS custom properties).
-  //
-  // Use HA's CSS custom properties (e.g. `--primary-color`, `--divider-color`)
-  // so your card automatically adapts to the user's chosen theme.
-  // Full property list: https://github.com/home-assistant/frontend/blob/dev/src/resources/ha-style.ts
-  //
-  // TODO: Replace the demo styles below with styles for your own card layout.
-  // https://lit.dev/docs/components/styles/
   static get styles(): CSSResultGroup {
     return css`
-      .card-content {
-        padding: 16px;
+      :host {
+        display: block;
       }
 
-      /* Enhanced cursor and interaction styles */
-      .clickable-card {
-        cursor: pointer;
-        transition: all 0.2s ease-in-out;
+      ha-card {
+        overflow: hidden;
       }
 
-      .clickable-card:hover {
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        transform: translateY(-1px);
+      .header {
+        padding: 16px 18px 2px;
+      }
+      .devname {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--primary-text-color);
       }
 
-      .clickable-card:active {
-        transform: translateY(0);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .clickable-row {
-        cursor: pointer;
-        border-radius: 8px;
-        padding: 8px;
-        margin: -8px;
-        transition: background-color 0.2s ease-in-out;
-      }
-
-      .clickable-row:hover {
-        background-color: var(--secondary-background-color);
-      }
-
-      .clickable-row:active {
-        background-color: var(--divider-color);
-      }
-
-      .entity-row {
+      /* ── Two-number readout: Setting | Actual ─────────────────── */
+      .readout {
         display: flex;
         align-items: center;
-        margin-bottom: 16px;
-        position: relative;
-      }
-
-      .icon {
-        margin-right: 16px;
-        color: var(--card-accent-color, var(--state-icon-color, var(--state-icon-active-color)));
-        transition: color 0.2s ease-in-out;
-      }
-
-      .clickable-row:hover .icon {
-        color: var(--card-accent-color, var(--primary-color));
-      }
-
-      /* Card style variants */
-      .style-compact .card-content {
-        padding: 8px;
-      }
-      .style-compact .entity-row {
-        margin-bottom: 8px;
-      }
-      .style-compact .name {
-        font-size: 14px;
-      }
-      .style-compact .state {
-        font-size: 12px;
-      }
-      .style-compact .action-buttons,
-      .style-compact .attributes {
-        margin: 8px 0;
-        padding: 8px;
-      }
-
-      .style-detailed .name {
-        font-size: 20px;
-      }
-      .style-detailed .state {
-        font-size: 16px;
-      }
-      .style-detailed .icon ha-icon {
-        width: 36px;
-        height: 36px;
-      }
-      .style-detailed .card-content {
-        padding: 24px;
-      }
-
-      .style-minimal .card-content {
-        padding: 12px 16px;
-      }
-      .style-minimal .attributes,
-      .style-minimal .timestamps {
-        display: none;
-      }
-
-      .icon ha-icon {
-        width: 24px;
-        height: 24px;
-      }
-
-      .entity-info {
-        flex: 1;
-      }
-
-      .entity-actions {
-        opacity: 0;
+        justify-content: center;
+        gap: 36px;
+        padding: 10px 0 16px;
         transition: opacity 0.2s ease-in-out;
+      }
+      .readout.is-off {
+        opacity: 0.5;
+      }
+      .ro-col {
+        text-align: center;
+        min-width: 110px;
+      }
+      .ro-value {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 3px;
+      }
+      .ro-num {
+        font-size: 44px;
+        font-weight: 300;
+        line-height: 1.05;
+        color: var(--primary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .ro-unit {
+        font-size: 22px;
+        font-weight: 300;
+        color: var(--secondary-text-color);
+        /* Superscript placement — degree sign sits at the top of the value. */
+        transform: translateY(-0.55em);
+      }
+      .ro-label {
         font-size: 12px;
         color: var(--secondary-text-color);
+        margin-top: 2px;
+      }
+      .ro-divider {
+        width: 1px;
+        height: 40px;
+        background: var(--divider-color);
       }
 
-      .entity-row:hover .entity-actions {
-        opacity: 1;
+      /* ── Mode buttons (ha-control-select) ─────────────────────── */
+      ha-control-select.modes {
+        margin: 0 18px 8px;
+        --mdc-icon-size: 22px;
       }
 
-      .toggle-hint {
-        font-style: italic;
+      /* ── Rows ─────────────────────────────────────────────────── */
+      .row {
+        border-top: 1px solid var(--divider-color);
+        padding: 12px 18px 14px;
       }
-
-      .name {
-        font-weight: 500;
-        font-size: 16px;
-        color: var(--primary-text-color);
-        margin-bottom: 4px;
-      }
-
-      .state {
-        font-size: 14px;
-        color: var(--secondary-text-color);
-      }
-
-      .attributes {
-        margin: 16px 0;
-        padding: 12px;
-        background: var(--secondary-background-color);
-        border-radius: 8px;
-      }
-
-      .attribute {
+      .rowhead {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 4px;
+        align-items: baseline;
+        margin-bottom: 6px;
       }
-
-      .attribute:last-child {
-        margin-bottom: 0;
-      }
-
-      .attr-key {
-        text-transform: capitalize;
+      .rowhead .label {
+        font-size: 12.5px;
         color: var(--secondary-text-color);
-      }
-
-      .attr-value {
         font-weight: 500;
+      }
+      .rowhead .val {
+        font-size: 13px;
         color: var(--primary-text-color);
+        font-variant-numeric: tabular-nums;
       }
-
-      /* Action buttons styling */
-      .action-buttons {
-        margin: 16px 0;
-        padding: 16px;
-        background: var(--card-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
-      }
-
-      .action-section h4 {
-        margin: 0 0 12px 0;
-        color: var(--primary-text-color);
-        font-size: 14px;
-        font-weight: 500;
-      }
-
-      .action-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        margin: 4px 4px 4px 0;
-        border: none;
-        border-radius: 16px;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease-in-out;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        vertical-align: middle;
-      }
-
-      .action-button ha-icon {
-        display: block;
-        margin: 0;
-      }
-
-      .action-button.primary {
-        background: var(--primary-color);
-        color: var(--text-primary-color);
-      }
-
-      .action-button.primary:hover {
-        background: var(--primary-color);
-        filter: brightness(1.1);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      }
-
-      .action-button.secondary {
-        background: var(--secondary-text-color);
-        color: var(--primary-background-color);
-      }
-
-      .action-button.secondary:hover {
-        background: var(--primary-text-color);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-      }
-
-      .action-button.toggle {
-        background: var(--success-color, #4caf50);
-        color: white;
-      }
-
-      .action-button.toggle:hover {
-        background: var(--success-color, #45a049);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
-      }
-
-      .action-button.service {
-        background: var(--warning-color, #ff9800);
-        color: white;
-      }
-
-      .action-button.service:hover {
-        background: var(--warning-color, #f57c00);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
-      }
-
-      .action-button:active {
-        transform: translateY(0);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-      }
-
-      .action-hints {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid var(--divider-color);
-        font-size: 11px;
-        color: var(--secondary-text-color);
-      }
-
-      .hint {
-        margin-bottom: 4px;
-        line-height: 1.4;
-      }
-
-      .hint:last-child {
-        margin-bottom: 0;
-      }
-
-      .timestamps {
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid var(--divider-color);
+      .rowhead .val.end {
         font-size: 12px;
         color: var(--secondary-text-color);
-      }
-
-      .last-changed,
-      .last-updated {
-        margin-bottom: 4px;
-      }
-
-      .last-updated {
-        margin-bottom: 0;
-      }
-
-      /* ── Horizontal layout ────────────────────────────────── */
-      .layout-horizontal {
-        --ha-card-border-radius: var(--ha-card-border-radius, 12px);
-      }
-      .horizontal-strip {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
+        gap: 5px;
       }
-      .horizontal-strip .icon {
-        margin-right: 0;
-        flex-shrink: 0;
+      .clock {
+        --mdc-icon-size: 14px;
       }
-      .horizontal-strip .entity-info {
+
+      ha-slider {
+        width: 100%;
+      }
+
+      /* ── Program select ───────────────────────────────────────── */
+      .progline {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .progline ha-select {
         flex: 1;
         min-width: 0;
       }
-      .horizontal-strip .name,
-      .horizontal-strip .state {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .horizontal-strip .horizontal-actions {
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-      }
-      .horizontal-strip .action-buttons {
-        margin: 0;
-        padding: 0;
-        background: none;
-        border: none;
-      }
-      .horizontal-strip .action-section h4,
-      .horizontal-strip .action-hints {
-        display: none;
-      }
-
-      /* ── Badge / chip mode ───────────────────────────────────── */
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px 4px 6px;
-        border-radius: 999px;
-        background: var(--card-background-color);
-        border: 1px solid var(--divider-color);
-        cursor: pointer;
-        font-size: 13px;
-        transition:
-          box-shadow 0.15s ease,
-          background 0.15s ease;
-        user-select: none;
-        -webkit-user-select: none;
-      }
-      .badge:hover {
-        box-shadow: var(--shadow-elevation-4dp, 0 2px 6px rgba(0, 0, 0, 0.18));
-        background: var(--secondary-background-color);
-      }
-      .badge:active {
-        box-shadow: none;
-      }
-      .badge-icon {
-        --mdc-icon-size: 18px;
-        color: var(--card-accent-color, var(--state-icon-color));
-      }
-      .badge-name {
-        font-weight: 500;
-        color: var(--primary-text-color);
-      }
-      .badge-state {
+      .progstep {
+        font-size: 12px;
         color: var(--secondary-text-color);
       }
+      ha-icon-button.stopbtn {
+        --ha-icon-button-size: 40px;
+        flex: none;
+      }
 
-      /* ── Skeleton / loading UI ───────────────────────────────── */
-      @keyframes skeleton-pulse {
+      /* ── Runtime stepper + chips ──────────────────────────────── */
+      .rt {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transition: opacity 0.2s ease-in-out;
+      }
+      .rt.dimmed {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-content: center;
+      }
+      .rtval {
+        min-width: 64px;
+        text-align: center;
+        font-size: 15px;
+        color: var(--primary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      ha-chip-set.chips {
+        justify-content: center;
+      }
+      ha-assist-chip.selected {
+        --ha-assist-chip-active-container-color: var(--primary-color);
+        --ha-chip-label-color: var(--text-primary-color);
+      }
+
+      /* ── In-flight command pulse ──────────────────────────────── */
+      @keyframes command-pulse {
         0%,
         100% {
           opacity: 1;
         }
         50% {
-          opacity: 0.4;
+          opacity: 0.55;
         }
       }
-      .skeleton {
-        border-radius: 4px;
-        background: var(--divider-color);
-        animation: skeleton-pulse 1.4s ease-in-out infinite;
-      }
-      .skeleton-content {
-        pointer-events: none;
-      }
-      .skeleton-row {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 16px;
-      }
-      .skeleton-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        flex-shrink: 0;
-      }
-      .skeleton-text-block {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .skeleton-name {
-        height: 16px;
-        width: 55%;
-      }
-      .skeleton-state {
-        height: 13px;
-        width: 35%;
-      }
-      .skeleton-attr {
-        height: 12px;
-        width: 80%;
-        margin-bottom: 8px;
-      }
-      .skeleton-attr--short {
-        width: 55%;
+      .sending {
+        animation: command-pulse 1s ease-in-out infinite;
       }
 
-      /* ── Theme-aware CSS custom properties ───────────────────── */
-      :host {
-        --card-accent-color: var(--primary-color);
-      }
-
-      /* ── Responsive ─────────────────────────────────────────── */
       @media (max-width: 600px) {
-        .action-button {
-          font-size: 11px;
-          padding: 6px 10px;
+        .readout {
+          gap: 20px;
         }
-        .entity-row {
-          margin-bottom: 12px;
-        }
-        .action-buttons {
-          margin: 12px 0;
-          padding: 12px;
-        }
-        .horizontal-strip {
-          flex-wrap: wrap;
-        }
-        .horizontal-strip .horizontal-actions {
-          width: 100%;
-          justify-content: flex-start;
+        .ro-num {
+          font-size: 38px;
         }
       }
     `;

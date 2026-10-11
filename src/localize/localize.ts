@@ -1,9 +1,14 @@
 import * as en from './languages/en.json';
 import * as nb from './languages/nb.json';
+import * as es from './languages/es.json';
 
 const languages: Record<string, Record<string, unknown>> = {
   en: en,
   nb: nb,
+  es: es,
+  // Home Assistant may report regional variants; the helper normalises '-' to
+  // '_', so map them to the same dictionary.
+  es_419: es,
 };
 
 function resolveTranslation(path: string, dictionary: Record<string, unknown>): string | undefined {

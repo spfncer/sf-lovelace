@@ -4,12 +4,11 @@ A custom [Lovelace](https://www.home-assistant.io/dashboards/) card for controll
 [BedJet V2 / BedJet 3](https://bedjet.com) devices through the
 [ha-bedjet](https://github.com/natekspencer/ha-bedjet) integration.
 
-> **Status:** in design — see [`design/bedjet-card-design.md`](design/bedjet-card-design.md)
+> **Status:** implemented — see [`design/bedjet-card-design.md`](design/bedjet-card-design.md)
 > for the locked specification and [`design/bedjet-card-mockup.html`](design/bedjet-card-mockup.html)
-> for an interactive mockup. The card element is currently the unmodified boilerplate
-> demo implementation, renamed for this project.
+> for an interactive mockup.
 
-## Features (planned)
+## Features
 
 - Target temperature and fan speed as sliders
 - Icon-only mode buttons: Heat / Cool / Dry / Off
@@ -17,11 +16,37 @@ A custom [Lovelace](https://www.home-assistant.io/dashboards/) card for controll
 - Time remaining with stepper + quick-set chips, paired with run-end time
 - Automatic V2/V3 feature detection (Dry, runtime, program availability)
 
+## Configuration
+
+### Minimal example
+
+```yaml
+type: custom:sf-bedjet-card
+entity: climate.master_bedjet
+```
+
+All sibling entities (runtime number, run-end-time sensor, biorhythm step sensor)
+are auto-discovered from the device registry. Optional overrides:
+
+```yaml
+type: custom:sf-bedjet-card
+entity: climate.master_bedjet
+name: Master BedJet        # header label
+runtime_entity: number.master_bedjet_runtime_remaining
+end_time_entity: sensor.master_bedjet_run_end_time
+step_entity: sensor.master_bedjet_bio_sequence_step
+```
+
+> **Program detection:** the integration's `bio_sequence_step` diagnostic sensor
+> is **disabled by default**. Enable it in Settings → Devices & Services →
+> Entities for exact `running · step N` tracking. Without it the card falls back
+> to a heuristic (fan running while the climate entity reports `off`).
+
 ## Installation
 
 ### Manual
 
-1. Download `sf-bedjet-card.js` from the [latest release](https://github.com/REPO_OWNER/sf-lovelace/releases).
+1. Download `sf-bedjet-card.js` from the [latest release](https://github.com/spfncer/sf-lovelace/releases).
 2. Copy it to `<config>/www/sf-bedjet-card.js`.
 3. Add a resource entry in your dashboard settings:
 
@@ -34,17 +59,6 @@ resources:
 ### HACS
 
 Not yet published — manual installation for now.
-
-## Configuration
-
-### Minimal example
-
-```yaml
-type: custom:sf-bedjet-card
-entity: climate.master_bedjet
-```
-
-All sibling entities (fan, runtime, sensors) are auto-discovered from the device registry.
 
 ## Developer Guide
 
@@ -113,6 +127,7 @@ src/
     ├── localize.ts               # i18n helper
     └── languages/
         ├── en.json               # English strings
+        ├── es.json               # Spanish strings
         └── nb.json               # Norwegian strings
 dist/
 └── sf-bedjet-card.js             # Build output — serve this to HA

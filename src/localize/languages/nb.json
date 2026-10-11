@@ -2,6 +2,37 @@
   "common": {
     "version": "Versjon",
     "invalid_configuration": "Ikke gyldig konfiguration",
-    "show_warning": "Vis advarsel"
+    "show_warning": "Vis advarsel",
+    "show_error": "Vis feil"
+  },
+  "bedjet": {
+    "entity": "BedJet-klimaenhet",
+    "name": "Navn",
+    "overrides": "Enhetsoverstyringer",
+    "runtime_entity": "Tid igjen (nummer)",
+    "end_time_entity": "Sluttid (sensor)",
+    "step_entity": "Programtrinn (sensor)",
+    "setting": "Innstilt",
+    "actual": "Faktisk",
+    "target_temp": "Måltemperatur",
+    "fan": "Vifte",
+    "program": "Program",
+    "time_remaining": "Tid igjen",
+    "ends": "slutter",
+    "running": "kjører",
+    "step": "trinn",
+    "stop": "Stopp",
+    "mode_heat": "Varme",
+    "mode_cool": "Kjøling",
+    "mode_dry": "Tørk",
+    "mode_off": "Av",
+    "none": "Ingen",
+    "turbo": "Turbo",
+    "extended_heat": "Utvidet varme",
+    "decrease": "Reduser",
+    "increase": "Øk",
+    "hours_short": "t",
+    "minutes_short": "min",
+    "no_entity": "Velg en BedJet-klimaenhet."
   }
 }

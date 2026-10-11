@@ -1,0 +1,38 @@
+{
+  "common": {
+    "version": "Versión",
+    "invalid_configuration": "Configuración no válida",
+    "show_warning": "Mostrar advertencia",
+    "show_error": "Mostrar error"
+  },
+  "bedjet": {
+    "entity": "Entidad de clima BedJet",
+    "name": "Nombre",
+    "overrides": "Anulaciones de entidades",
+    "runtime_entity": "Tiempo restante (número)",
+    "end_time_entity": "Hora de finalización (sensor)",
+    "step_entity": "Paso del programa (sensor)",
+    "setting": "Ajustado",
+    "actual": "Actual",
+    "target_temp": "Temperatura objetivo",
+    "fan": "Ventilador",
+    "program": "Programa",
+    "time_remaining": "Tiempo restante",
+    "ends": "termina",
+    "running": "en ejecución",
+    "step": "paso",
+    "stop": "Detener",
+    "mode_heat": "Calor",
+    "mode_cool": "Frío",
+    "mode_dry": "Seco",
+    "mode_off": "Apagado",
+    "none": "Ninguno",
+    "turbo": "Turbo",
+    "extended_heat": "Calor extendido",
+    "decrease": "Disminuir",
+    "increase": "Aumentar",
+    "hours_short": "h",
+    "minutes_short": "min",
+    "no_entity": "Selecciona una entidad de clima BedJet."
+  }
+}

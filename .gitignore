@@ -1,6 +1,7 @@
 /node_modules/
 /.rpt2_cache/
 /dist
+.DS_Store
 homeassistant/
 .devcontainer/config/.storage/
 .devcontainer/config/tts/
