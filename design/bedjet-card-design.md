@@ -127,7 +127,21 @@ There is no dedicated status line — state is visible through the controls them
 | Extended Heat option | only if `Extended Heat` ∈ `preset_modes` (V3 only) |
 | Temp range | from climate `min_temp`/`max_temp` (V2 fixed 19–43 °C) |
 
-The integration is **°C-only**; the card displays °C (device °F display is not exposed to HA).
+### Temperature units
+
+- The BedJet BLE protocol speaks **°C only** (half-degree values); the °F/°C setting on the
+  device and in the BedJet app is purely cosmetic and never reaches HA.
+- ha-bedjet declares its entity in °C. HA's climate base class converts values to the
+  temperature unit configured in HA (Settings → System → General) and exposes the resulting
+  unit through the `temperature_unit` state attribute — see
+  [Climate entities now expose their temperature unit](https://developers.home-assistant.io/blog/2026/10/08/climate-native-temperature)
+  (2026-10-08). So on a °F instance the BedJet shows °F, with no card-side work.
+- **Card rule:** read `climate.attributes.temperature_unit` (fallback
+  `hass.config.unit_system.temperature_unit`) and render *and* send everything in that
+  unit — readout, slider values, and `climate.set_temperature` payloads. Slider range from
+  `min_temp`/`max_temp` (already converted); step = 0.5 for °C, 1 for °F (or
+  `target_temperature_step` when the integration provides it). No hardcoded units; the
+  mockup just illustrates °C.
 
 ## 7. Config sketch
 
@@ -158,6 +172,9 @@ entity: climate.master_bedjet   # everything else auto-discovered via device reg
 8. **Readout** — two numbers side by side: **Setting** (target) | **Actual** (current
    temperature), separated by a divider; large numbers, small muted labels. The ambient
    temperature sensor is no longer displayed on the card.
+9. **Temperature units** — follow HA: display and send in the climate entity's
+   `temperature_unit` attribute (which HA converts to the instance's configured unit).
+   No unit option on the card, no conversion code.
 
 ## 9. Implementation outline
 
