@@ -240,6 +240,18 @@ export class SfBedjetCard extends LitElement {
     return (stateObj.attributes.temperature_unit as string | undefined) ?? this.hass.config.unit_system.temperature;
   }
 
+  /**
+   * Target temperature from the climate state.
+   *
+   * Home Assistant exposes the climate target temperature as the
+   * `temperature` state attribute (`ATTR_TEMPERATURE`); there is no
+   * `target_temperature` attribute on the wire.
+   */
+  private _targetTemp(stateObj: HassEntity): number | undefined {
+    const value = stateObj.attributes.temperature as number | undefined;
+    return typeof value === 'number' && !Number.isNaN(value) ? value : undefined;
+  }
+
   private _tempStep(stateObj: HassEntity): number {
     const step = stateObj.attributes.target_temp_step as number | undefined;
     if (typeof step === 'number' && step > 0) {
@@ -563,8 +575,8 @@ export class SfBedjetCard extends LitElement {
     const idempotent = now - RECONCILE_TIMEOUT_MS;
 
     if (this._tempOverride !== undefined) {
-      const real = stateObj.attributes.target_temperature;
-      if (typeof real === 'number' && Math.abs(real - this._tempOverride) < 0.05) {
+      const real = this._targetTemp(stateObj);
+      if (real !== undefined && Math.abs(real - this._tempOverride) < 0.05) {
         this._tempOverride = undefined;
       } else if (
         !this._tempInFlight &&
@@ -641,7 +653,7 @@ export class SfBedjetCard extends LitElement {
   private _renderReadout(stateObj: HassEntity): TemplateResult {
     const unit = this._temperatureUnit(stateObj);
     const step = this._tempStep(stateObj);
-    const target = this._tempOverride ?? (stateObj.attributes.target_temperature as number | undefined);
+    const target = this._tempOverride ?? this._targetTemp(stateObj);
     const current = stateObj.attributes.current_temperature as number | undefined;
 
     return html`
@@ -716,7 +728,7 @@ export class SfBedjetCard extends LitElement {
     const step = this._tempStep(stateObj);
     const min = (stateObj.attributes.min_temp as number | undefined) ?? 19;
     const max = (stateObj.attributes.max_temp as number | undefined) ?? 43;
-    const value = this._tempOverride ?? (stateObj.attributes.target_temperature as number | undefined);
+    const value = this._tempOverride ?? this._targetTemp(stateObj);
     const disabled = this._slidersDisabled(stateObj);
 
     return html`
