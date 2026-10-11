@@ -171,7 +171,8 @@ entity: climate.master_bedjet   # everything else auto-discovered via device reg
    controls (active mode button, select value, runtime row).
 8. **Readout** — two numbers side by side: **Setting** (target) | **Actual** (current
    temperature), separated by a divider; large numbers, small muted labels, with the unit
-   suffix rendered smaller and muted beside each value (mirroring HA's climate UI). The
+   suffix rendered smaller, muted, and raised to the top of the value (superscript
+   placement — the degree sign aligns with the top of the digits, not mid-height). The
    ambient temperature sensor is no longer displayed on the card.
 9. **Temperature units** — follow HA: display and send in the climate entity's
    `temperature_unit` attribute (which HA converts to the instance's configured unit).

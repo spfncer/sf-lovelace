@@ -62,7 +62,11 @@
     font-size: 44px; font-weight: 300; line-height: 1.05;
     color: var(--primary-text-color); font-variant-numeric: tabular-nums;
   }
-  .ro-unit { font-size: 22px; font-weight: 300; color: var(--secondary-text-color); }
+  .ro-unit {
+    font-size: 22px; font-weight: 300; color: var(--secondary-text-color);
+    /* superscript placement — degree sign sits at the top of the value */
+    transform: translateY(-0.55em);
+  }
   .ro-label { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
   .ro-divider { width: 1px; height: 40px; background: var(--divider-color); }
 
