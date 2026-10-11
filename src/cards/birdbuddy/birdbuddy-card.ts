@@ -251,18 +251,24 @@ export class SfBirdbuddyCard extends LitElement {
     return state;
   }
 
-  /** "Seen X ago" from the photo entity's `last_updated`. */
+  /**
+   * "Seen X ago" from the recent visitor sensor's `last_changed`.
+   *
+   * The sensor (not the image entity) carries the "when the visitor was
+   * recorded" timestamp that the native HA UI shows. `last_changed` is used
+   * because `last_updated` can be bumped by attribute-only refreshes, which
+   * would make an old visitor look recent.
+   */
   private _seenText(): string | undefined {
-    const { image, recentVisitor } = this._discover();
-    const sourceId = image ?? recentVisitor;
-    if (!sourceId) {
+    const { recentVisitor } = this._discover();
+    if (!recentVisitor) {
       return undefined;
     }
-    const stateObj = this.hass.states[sourceId];
+    const stateObj = this.hass.states[recentVisitor];
     if (!stateObj) {
       return undefined;
     }
-    const timestamp = new Date(stateObj.last_updated).getTime();
+    const timestamp = new Date(stateObj.last_changed).getTime();
     if (Number.isNaN(timestamp)) {
       return undefined;
     }
