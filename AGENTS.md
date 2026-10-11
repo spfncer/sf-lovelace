@@ -93,6 +93,18 @@ yarn lint
 4. Update docs/README when behavior or config changes.
 5. Summarize what changed and why.
 
+## Releasing
+
+Releases are Git tags surfaced to HACS via a GitHub release. Before tagging:
+
+1. Bump `version` in `package.json` and `CARD_VERSION` in `src/shared/const.ts`.
+2. Commit the change, then run:
+
+```bash
+git tag vX.Y.Z && git push origin vX.Y.Z
+gh release create vX.Y.Z --title "vX.Y.Z"
+```
+
 ## Pull request guidance
 
 - Keep PRs focused to one logical change.
